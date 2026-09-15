@@ -91,3 +91,59 @@ drafting call. Rust JD -> SKIP (exit 1). Werkstudent JD -> PROCEED (exit 0).
 - Token-level metric validation cannot bind a number to its own metric string: a real
   "61" could appear in a fabricated "61% faster". Span-level check if Phase 2 evals show
   that failure mode.
+
+## Real-JD bug pass — 2026-09-15
+
+Pulled 10 real postings via Apify (LinkedIn scraper), saved to `evals/real/`. Ran all 10
+through `jobpilot add`. 3 false skips, 1 false pass out of 10. Fixed all five; 68 tests
+now pass (was 51).
+
+1. **Compound language requirement passed on its claimable half.** "Fluency in English and
+   German is required" covered by keyword `english` alone — cleared the gate on a
+   German-mandatory job (Bain). `unclaimable_languages()` + `_blocked_language()` in
+   `coverage.py`: reads requirement TEXT (not just `keywords`, which the extractor had
+   only emitted `english` for), blocks the whole requirement if it names a language below
+   fluency, precedes both signals. Prompt rule 1 now calls out language pairs explicitly.
+   Exposed a second bug in the same pass: the multi-word keyword rule required every word
+   known, so "fluent in english" failed where bare "english" matched. `KEYWORD_FILLER`
+   strips grading/glue words before that check.
+2. **Personality traits typed `hard`.** "Genuinely interested in lithium-ion batteries",
+   "you read papers and benchmarks critically", "independent working style" — none
+   evidenceable by a CV line, all uncovered, all counted as blocking gaps. Caused 2 of the
+   3 false skips (ACCURE, Retorio) outright, a third (Recall Space) partially. Prompt
+   rules 8 ("disposition is never hard" — the test is "could a CV line prove it?") and 9
+   ("or keen to start" makes a clause soft, not hard).
+3. **Absence of a fact read as failure of it.** Bundesbank skipped at 100% hard coverage
+   on "4th semester" and "GPA 2.5" — neither is in master_profile.yaml, nothing ever will
+   put them there. `Requirement.unknown` + `UNRECORDED_FACT_PATTERNS` (semester, GPA,
+   transcript, Führerschein, Führungszeugnis): an unrecorded personal fact routes to
+   `open_questions()` and a `?` in the report, not a skip. `unmet_disqualifiers()` excludes
+   `unknown`. German stays a real disqualifier — A1/A2 is a recorded fact, not a blank.
+4. **On-site clauses never compared to where the job is.** Nothing in the gate knew
+   Deepak's own location, so Mannheim/Attendorn skipped by accident (nothing matched) and
+   Berlin (commutable from Potsdam) skipped for real. `location_terms()` from
+   `identity.location` + `constraints.relocation`, `GENERIC_PLACE_WORDS` drops "germany"
+   (every LinkedIn location ends in it — kept, it would make Munich read as commutable).
+   New `--location` CLI flag; job.location empty -> `unknown`, not skip. Also: Recall
+   Space's on-site clause lived in the JD's Benefits block and rule 7 (ignore boilerplate)
+   ate it — prompt carved out an explicit exception for where-the-work-happens statements.
+5. **Long multi-clause requirements dilute the embedding** — the 0.0045-margin problem
+   from Phase 1, now confirmed on real text: "First programming experience (e.g.
+   university projects, own projects, internships)" scored 0.465 against 2.5yrs production
+   SWE. First tried splitting the requirement itself at extraction — fixed retrieval but
+   broke the gate (inflated `uncovered_hard` counts under the same `max_blocking_hard_gaps
+   = 1`; Temedica, a real PROCEED, started skipping). Reverted. Fix landed on the
+   retrieval side instead: `subqueries()` splits a requirement's TEXT into clauses for
+   query purposes only, `retrieve_evidence` merges best-per-bullet back onto the one
+   requirement. Gate still counts it once, keyword anchor still spans the full text. Mean
+   similarity rose across all 10 JDs; threshold re-verified unchanged (0.5558, 0/15).
+
+### Still open
+
+- Retorio's `built agents yourself` gap is real — this repo isn't in
+  `master_profile.yaml`. Evidence to add, not code to fix.
+- Extractor still translates German postings to English (ARAG, Mubea, Bundesbank,
+  disruptive all came back English) — keywords go into the report in English while those
+  companies' ATS filters on German.
+- valuemize's "hybrid optional" reads as a hard on-site disqualifier and skips. No
+  hybrid/remote signal in `_is_onsite`/`ONSITE_PATTERNS`.
