@@ -179,15 +179,37 @@ after the Phase 1 gap report, plus an `artifacts:` block naming the rendered PDF
    instead of a typed exception — acceptable for an internal graph-node invariant, but
    worth a typed exception if this ever runs outside a controlled graph context (Task 9
    minor).
-4. **No live end-to-end run of the full LLM pipeline has been performed yet, in ANY task
-   of this implementation.** Every LLM-calling node (`diagnose`, `rewrite`, `review`) was
-   built and unit/structurally tested against stubs and fixtures, and the Typst render +
-   ATS score were verified against real generated JSON — but the actual generated CV/
-   cover-letter quality, and the full graph's live behavior against a real JD, are
-   unverified pending an `ANTHROPIC_API_KEY`. **This is the single most important thing
-   for whoever picks this up next to do FIRST** — run
-   `jobpilot add --file evals/golden/real_temedica_ws_agentic.txt --location "Munich, Germany"`
-   with a real key configured and read the output critically.
+4. **Live-tested 2026-09-15: 10 real JDs pulled via Apify (LinkedIn Jobs Scraper,
+   "Working Student Data" / Germany), run through `jobpilot add` with a real
+   `ANTHROPIC_API_KEY`.** Found and fixed one Critical bug immediately: `claude-sonnet-5`
+   rejects any explicit `temperature=` kwarg ("`temperature` is deprecated for this
+   model") — this crashed every single job that reached `diagnose` (3/10, since the
+   Phase 1 gate itself correctly skipped the other 7 on real disqualifiers — German
+   fluency, onsite-in-a-city-the-candidate-can't-reach). Fixed by dropping `temperature=`
+   from the three Sonnet-backed nodes (`diagnose.py`/`rewrite.py`/`review.py`); Haiku
+   nodes (`extract_requirements`/`classify_role`) were unaffected and needed no change.
+   After the fix, all 3 re-ran cleanly end-to-end through `diagnose → rewrite →
+   validate_facts` — **and the fact validator correctly caught real LLM fabrication live**
+   (the rewriter claimed "machine learning"/"visualization"/"iot" with no profile
+   evidence on the Mubea JD; `validate_facts` retried twice, still failed, and correctly
+   routed to `log_fact_failure` instead of rendering — exactly the guardrail's designed
+   behavior, observed for the first time against a real model).
+5. **New finding from that same live run: the fact validator's JD-keyword check is
+   trigger-happy on generic single-word terms** ("data", "learning", "cloud", "r",
+   "analytical") — `extract_requirements` emits these as `keywords` verbatim from the
+   JD, and `validate_facts` treats ANY JD keyword as requiring specific tech evidence,
+   even words that aren't really naming a technology. This produced several
+   fact-validation failures across the batch that read more like false positives than
+   real fabrication (e.g. flagging "learning" as unevidenced when the profile clearly
+   has Machine Learning skills — just not under that exact single-word token). No fix
+   applied yet — this needs a design decision (filter stopword-like JD keywords before
+   they reach `validate_facts`? require a minimum keyword length? exempt words that
+   overlap `KEYWORD_FILLER` from `coverage.py`?) rather than an ad hoc patch. **None of
+   the 10 live jobs reached `render_documents`/`score_ats`** in this run — either
+   Phase-1-skipped or blocked here — so those two nodes are still only verified via
+   Task 8/9's structural tests, not a real live end-to-end render+score. Re-run against
+   a wider/less German-heavy job pool, or loosen this check, to get a first real
+   render+score sample.
 
 5. **`highlighted_projects` is written by `rewrite` and read by nothing** — `render.py`,
    `scoring/ats.py`, and `cli.py` all ignore it. Either surface it somewhere (e.g. an ATS
