@@ -27,6 +27,7 @@ dependencies = [
     # storage & output
     "ruamel.yaml>=0.18",
     "typst>=0.11",
+    "pypdf>=5.0",
     # ops
     "structlog>=24.4",
     "typer>=0.15",

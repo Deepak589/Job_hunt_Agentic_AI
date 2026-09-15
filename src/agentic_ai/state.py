@@ -13,6 +13,18 @@ from pydantic import BaseModel, Field
 
 ReqType = Literal["hard", "soft", "disqualifier"]
 EvidenceSource = Literal["cv_bullet", "project", "repo_doc", "education"]
+AtsVerdict = Literal["apply", "fix_then_apply", "skip"]
+
+
+class AtsScore(BaseModel):
+    """plan.md §6. Counts first, arithmetic second — a score with no fact table under it
+    is invalid, so `report` always carries both."""
+
+    total: float
+    verdict: AtsVerdict
+    gates: dict[str, bool]  # gate name -> passed
+    components: dict[str, float]  # component name -> points earned
+    report: str  # the human-readable breakdown, plan.md §6 "Report format"
 
 
 class Evidence(BaseModel):
@@ -112,6 +124,7 @@ class JobState(BaseModel):
     draft: Draft | None = None
     attempt_count: int = 0  # rewrite calls so far — shared cap across the fact-check and review loops
     validation_errors: list[str] = []  # filled by validate_facts; cleared on a clean rewrite
+    ats: AtsScore | None = None
     artifacts: dict[str, str] = {}  # rendered PDF paths — filled by render_documents (Task 8), read by score_ats (Task 9) and the CLI (Task 10)
 
     def hard(self) -> list[Requirement]:
