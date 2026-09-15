@@ -147,3 +147,53 @@ now pass (was 51).
   companies' ATS filters on German.
 - valuemize's "hybrid optional" reads as a hard on-site disqualifier and skips. No
   hybrid/remote signal in `_is_onsite`/`ONSITE_PATTERNS`.
+
+## Review — Phase 2 closed 2026-09-15
+
+Shipped: the full `diagnose -> rewrite -> validate_facts -> review` loop (with the
+retry-on-fact-error and retry-on-low-score cycles back to `rewrite`, gated by
+`attempt_count` vs `settings.max_rewrite_attempts`), Typst-based PDF rendering for the
+two-column CV and cover letter (`render.py` + `templates/*.typ`), deterministic ATS
+scoring (`scoring/ats.py`, 5-component rubric + fabrication gate, printed as a report
+string), and a `--no-render` CLI flag that stops the graph after `review` (builds a
+second, shorter-tailed compiled graph rather than branching one graph at runtime) for
+cheaper iteration on prompts. `jobpilot add` now prints DIAGNOSIS / DRAFT / ATS sections
+after the Phase 1 gap report, plus an `artifacts:` block naming the rendered PDF paths.
+99 tests pass (was 68 going into this phase).
+
+### Known items carried forward (real findings, not hypothetical)
+
+1. **`_local_tech()` stack-list fallback can misattribute a job-scoped tech term to the
+   wrong bullet under the same employer/project.** It grants any JD term listed in a
+   job's/project's stack as "evidenced" for ANY bullet under that parent, even one whose
+   own outcome text never mentions the term — a job-scoped misattribution, not a
+   wholesale invented-skill leak (Task 2 minor, deferred).
+2. **The ATS score's "literal keywords" component is binary (0 or 20 points)**, not a
+   graduated check of verbatim keyword presence in the rendered draft — the numerator
+   always equals the denominator whenever any requirement is covered. This is inherited
+   verbatim from the plan's own reference implementation (task-9-brief.md Step 4), not a
+   bug introduced during implementation. Ruled accepted: doesn't affect the fabrication
+   gate or the apply/fix/skip threshold logic, which score independently (Task 9
+   Important, ruled accepted).
+3. **`score_ats()`'s precondition check uses a bare `assert`** for the `cv_pdf` artifact
+   instead of a typed exception — acceptable for an internal graph-node invariant, but
+   worth a typed exception if this ever runs outside a controlled graph context (Task 9
+   minor).
+4. **No live end-to-end run of the full LLM pipeline has been performed yet, in ANY task
+   of this implementation.** Every LLM-calling node (`diagnose`, `rewrite`, `review`) was
+   built and unit/structurally tested against stubs and fixtures, and the Typst render +
+   ATS score were verified against real generated JSON — but the actual generated CV/
+   cover-letter quality, and the full graph's live behavior against a real JD, are
+   unverified pending an `ANTHROPIC_API_KEY`. **This is the single most important thing
+   for whoever picks this up next to do FIRST** — run
+   `jobpilot add --file evals/golden/real_temedica_ws_agentic.txt --location "Munich, Germany"`
+   with a real key configured and read the output critically.
+
+### Carried into Phase 3 (per plan.md §16)
+
+- `recruiter_sim` and `hiring_manager` nodes (roles 4 and 5 of the five-role pipeline;
+  `diagnose`/`rewrite`/`review` — roles 1-3 — are done).
+- SQLite persistence (a checkpointer/cost ledger — currently one job, one invocation, no
+  resume).
+- The human interrupt point (`§9`) — nothing to resume yet; Phase 2 runs straight
+  through.
