@@ -17,6 +17,7 @@ import hashlib
 from langgraph.graph import END, StateGraph
 
 from .coverage import hard_gap_gate, log_skip, retrieve_evidence, score_coverage
+from .nodes.diagnose import diagnose
 from .nodes.requirements import extract_requirements
 from .state import Job, JobState
 
@@ -38,6 +39,7 @@ def build_graph():
     g.add_node("retrieve_evidence", retrieve_evidence)
     g.add_node("score_coverage", score_coverage)
     g.add_node("log_skip", log_skip)
+    g.add_node("diagnose", diagnose)
 
     g.set_entry_point("load_job")
     g.add_edge("load_job", "extract_requirements")
