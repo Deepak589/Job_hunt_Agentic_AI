@@ -1,7 +1,7 @@
 // Two-column CV template — data-driven, renders from cv_data.json
 // Palette sampled from the original main_cv.pdf: #2C3E50
 
-#let d = json("../data/cv_data.json")
+#let d = json(sys.inputs.data)
 
 #let ink      = rgb("#2C3E50")
 #let sidetext = rgb("#DDE3E8")
