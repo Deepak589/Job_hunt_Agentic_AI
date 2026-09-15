@@ -59,6 +59,40 @@ class Job(BaseModel):
     employment_type: str | None = None  # werkstudent | fulltime | intern | unknown
 
 
+class Diagnosis(BaseModel):
+    """Output of the `diagnose` node — line-by-line CV vs JD (plan.md §7.1)."""
+
+    hard_gaps: list[str] = []  # named requirement, zero evidence — cannot be rewritten away
+    soft_gaps: list[str] = []
+    disqualifiers: list[str] = []  # met at the gate already; carried through for the record
+    matches: list[str] = []  # what the CV already covers well, with evidence
+    positioning_mismatch: str | None = None  # e.g. "AI/ML Engineer header vs a data-analyst JD"
+
+
+class DraftBullet(BaseModel):
+    """One rewritten bullet — the XYZ sentence plus what a validator can check it against.
+
+    `text` is the actual line that reaches the CV: a complete sentence, strong verb first,
+    the metric printed inline if there is one. `metric` and `source_bullet_id` are NOT
+    rendered — they exist so `validate_facts` can check the metric appears verbatim and
+    traces to a real profile bullet, without re-parsing prose to find them.
+    """
+
+    text: str
+    metric: str | None = None  # None is honest — "no number exists", never filled to look nicer
+    source_bullet_id: str  # must be in Profile.bullet_ids — this is what makes validation possible
+
+
+class Draft(BaseModel):
+    """Output of the `rewrite` node (plan.md §7.2)."""
+
+    profile_line: str
+    section_order: list[str]  # from section_order.SECTION_ORDER — rewrite doesn't invent this
+    bullets: dict[str, list[DraftBullet]]  # section_id -> bullets, in the order to print
+    cover_letter: str
+    highlighted_projects: list[str] = []  # profile project ids surfaced this application
+
+
 class Scores(BaseModel):
     hard_coverage: float = 0.0  # 0..1, deterministic
     soft_coverage: float = 0.0  # 0..1, deterministic
@@ -74,6 +108,11 @@ class JobState(BaseModel):
     # LangGraph needs an explicit reducer for any field multiple nodes append to,
     # otherwise concurrent writes silently overwrite (plan.md §2).
     notes: Annotated[list[str], operator.add] = []
+    diagnosis: Diagnosis | None = None
+    draft: Draft | None = None
+    attempt_count: int = 0  # rewrite calls so far — shared cap across the fact-check and review loops
+    validation_errors: list[str] = []  # filled by validate_facts; cleared on a clean rewrite
+    artifacts: dict[str, str] = {}  # rendered PDF paths — filled by render_documents (Task 8), read by score_ats (Task 9) and the CLI (Task 10)
 
     def hard(self) -> list[Requirement]:
         return [r for r in self.requirements if r.type == "hard"]
