@@ -1,0 +1,20 @@
+Werkstudent:in AI Engineering (m/w/d) — disruptive — Munich, Bavaria, Germany
+
+Deine Vision. Unsere Plattform.
+Wir bei disruptive, einer jungen KI-Beratung aus München, helfen Mittelständlern, die Chancen von KI-Technologien in langfristigen Unternehmenserfolg zu überführen. Zur Unterstützung unseres Tech-Teams suchen wir ab sofort eine:n motivierte:n Werkstudent:in (m/w/d) im AI Engineering.
+
+Aufgaben
+- AI- & API-Integrationen: Du bindest moderne KI-Schnittstellen (LLMs, Einbettungen, Vektordatenbanken) und diverse Software-Tools via APIs an.
+- Software Development: Du unterstützt bei der Weiterentwicklung unserer Software-Tools und Prototypen (Fokus auf Python und TypeScript).
+- Data Engineering für KI: Du hilfst, Daten für KI-Modelle, RAG-Systeme und Prozessautomatisierungen optimal aufzubereiten.
+
+Qualifikation
+- Du bist eingeschriebene:r Student:in – idealerweise in Informatik, Wirtschaftsinformatik, Data Science oder einem vergleichbaren MINT-Studiengang.
+- Erste Programmiererfahrung in mindestens zwei Sprachen, idealerweise Python und/oder TypeScript. Vibe Coding (mit AI-Assistants wie Cursor oder GitHub Copilot) ist absolut okay – solange du den Code wirklich verstehst, debuggen und logisch strukturieren kannst.
+- KI-Enthusiasmus: Du verfolgst die aktuelle KI-Entwicklung und hast idealerweise schon erste private Projekte mit LLM-Orchestrierung oder Agentic AI umgesetzt.
+- Analytische Fähigkeiten: Du durchdringst komplexe Problemstellungen.
+- Eigeninitiative: Du arbeitest selbstständig, denkst mit und besitzt eine hohe Lernbereitschaft.
+- Erste Kontakte mit Fullstack Engineering, Cloud Services (AWS/Azure), Knowledge Graphs oder Data Pipelines.
+- Fließendes Deutsch (absolutes Muss) und sehr gute Kenntnisse in Englisch.
+
+Unser Angebot: Faire Vergütung und flexible Arbeitszeiten (bis zu 20 Std./Woche), enger Austausch mit einem motivierten Team, Mobile Office, Workation.

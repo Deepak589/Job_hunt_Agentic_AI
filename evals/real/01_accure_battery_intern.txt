@@ -1,0 +1,22 @@
+Internship or Master Thesis Battery Analytics (all genders) — ACCURE Battery Intelligence — Aachen, North Rhine-Westphalia, Germany
+
+About Us
+At ACCURE, we empower batteries and those who use them. Batteries are a key element of our clean energy and mobility future. ACCURE makes batteries safe, reliable, and sustainable through the power of the cloud. Using our highly scalable monitoring and optimization platform, we drastically improve the performance of batteries in electric vehicles and grid storage systems around the world.
+
+Your Role
+- Data exploration: Dig into one of the world's largest battery operation datasets, covering grid-scale battery energy storage systems (BESS), and work out what it says about performance, safety and lifetime.
+- Analytics and models: Find trends, anomalies and predictive patterns, and help turn them into methods that run in production.
+- Visualisation: Turn analysis into visuals an engineer, an operator or a customer can act on.
+- AI in the workflow: Use AI tools as a normal part of how the work gets done, from exploring data to writing code, and build the judgement to tell a correct answer from a merely plausible one.
+- Real project work: Take a real piece of a real project, with a mentor and a clear deliverable, not a side task invented for a student.
+
+Your Skills
+- Studies: You are enrolled in a technical degree, for example electrical or mechanical engineering, computational science or data science.
+- Battery and BESS enthusiast: You are genuinely interested in lithium-ion batteries and the BESS industry, and have picked up some battery basics already.
+- Python: You can work with data in Python, or you are close enough that you will get there fast.
+- AI tools: You already use AI tools in your studies, or you are keen to start, and you check the output rather than trusting it.
+- Working method: You bring initiative, structure and reliability, you think analytically, and you ask when something is unclear.
+- Languages: You communicate confidently in English. German is a plus, not a requirement.
+
+Our Offer
+- Real data, real impact. Get on top of the technology. Learning: Direct access to leading battery experts, field data analysis and cloud-based infrastructure. Shape your role. A path, not a stint. Office based: Work from our lovely office in Aachen.

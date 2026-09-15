@@ -1,0 +1,20 @@
+Praktikum im Bereich Analyse, Methoden und Digitalisierung der Konjunktur-, Preis- und Immobilienmarktstatistiken — Deutsche Bundesbank — Frankfurt am Main, Hesse, Germany
+
+Arbeit von besonderem Wert: Dein Einsatz bei uns
+- Du bekommst einen Einblick in die Arbeit einer/eines Data Scientist im Bereich realwirtschaftlicher Statistiken.
+- Du kannst Deine Fähigkeiten und Kenntnisse von Programmiersprachen (Python, R) anwenden und erweitern.
+- Du wirkst bei der Anbindung neuer Datenquellen (z. B. Web Scraping) oder bei der Optimierung von Datenverarbeitungsstrecken und DQM-Prozessen (Outlier Detection, Machine Learning, Visualisierung, Dashboard-/GUI-Entwicklung) mit.
+- Du unterstützt uns bei der Migration unserer Anwendungen in die Cloud.
+
+Besondere Werte: Deine Qualifikationen
+- Studierende der (Wirtschafts-)Informatik/Mathematik, Physik, Wirtschaftswissenschaften oder Data Science
+- Mindestens im 4. Fachsemester
+- Aktueller Notendurchschnitt: 2,5 oder besser
+
+Darüber hinaus wünschenswert:
+- Sehr gute Kenntnisse in Python oder R für Datenverarbeitung und -aufbereitung sowie DQM
+- Gute statistische und volkswirtschaftliche Kenntnisse
+- Gute Kenntnisse in Cloud-Infrastrukturen und Container-Technologien
+- Kooperationsfähigkeit und hohe Bereitschaft zur selbstständigen Einarbeitung in neue Themenbereiche
+
+Vergütung & Perspektiven, New Work: Homeoffice-Möglichkeiten innerhalb von Deutschland, flexible und planbare Arbeitszeiten. Zusatzleistungen: gute Verkehrsanbindung, Betriebsrestaurant.

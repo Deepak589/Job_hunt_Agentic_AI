@@ -1,0 +1,14 @@
+Werkstudent Data Science & Machine Learning (m/w/d) — Mubea — Attendorn, North Rhine-Westphalia, Germany
+
+In den vergangenen Jahrzehnten haben wir uns mit unseren Produkten für Fahrwerk, Karosserie und Antrieb zu einem Top-Automobilzulieferer entwickelt. Als inhabergeführtes Familienunternehmen beschäftigen wir weltweit mehr als 17.200 Mitarbeiter an 70 Standorten in 22 Ländern.
+
+Das Sind Deine Aufgaben
+Gestalte die digitale Zukunft der Produktion aktiv mit! In unserem Zentralbereich Fertigungstechnologien unterstützt Du uns beim Aufbau intelligenter Produktionssysteme. Du arbeitest an Machine Learning Use Cases wie Predictive Maintenance, Anomalieerkennung und Prozessoptimierung – von der Datenanalyse bis zum produktiven ML-Modell. Dabei nutzt Du Echtzeitdaten aus unserer zentralen IoT-Plattform, entwickelst Auswertungsalgorithmen und baust Dashboards für unsere weltweiten Produktionsstandorte auf.
+
+Das Wünschen Wir Uns Von Dir
+- Du befindest Dich mindestens im 3. Semester Deines B.Sc.- oder M.Sc.-Studiums in Data Science, Informatik, Maschinenbau, Wirtschaftsingenieurwesen, Mathematik oder einem verwandten Studiengang.
+- Du hast bereits erste Erfahrungen mit Python und interessierst Dich für Machine Learning (z.B. scikit-learn, TensorFlow, pandas).
+- Du gehst sicher mit Datenanalyse und Visualisierung um.
+- Du hast die Möglichkeit, regelmäßig in Attendorn zu arbeiten.
+- Du bringst analytisches Denken, Neugier und eine Hands-on-Mentalität mit.
+- Idealerweise hast Du bereits mit SQL, Zeitreihendaten oder IoT-Systemen gearbeitet.

@@ -1,0 +1,40 @@
+Working Student – AI and Agentic Engineering (f/m/x) — Temedica
+Germany · Hybrid (work from anywhere within Germany) · Working student
+
+As a Working Student – AI and Agentic Engineering (f/m/x), you will get the chance to
+design, prototype, and develop LLM-based applications, AI agents, and intelligent
+automation solutions in the digital health sector. You will work on practical AI use cases
+that create value for users, customers, and internal teams. Working closely with
+experienced engineers, product teams, and data professionals, you will contribute to
+turning AI ideas into usable solutions, from early prototypes to product-ready features.
+
+Your Role with us
+- Design, prototype, and develop AI-powered products, features, agents, and intelligent
+  automation workflows
+- Evaluate and improve AI solutions with a focus on output quality, reliability, usability,
+  and safety in regulated environment such as healthcare
+- Collaborate with engineering, product, and data teams to turn real-world use cases into
+  scalable AI-enabled solutions
+
+What you bring to the table
+- You are currently enrolled in a Bachelor's or Master's program in Computer Science, AI,
+  Data Science, IT, or a related field.
+- You have hands-on experience developing AI-agentic applications or AI-powered products
+  using frameworks such as LangChain, Google ADK, or similar.
+- You have strong programming skills, preferably in Python, and experience working with
+  APIs, data sources, and modern software development practices.
+- You are curious, product-minded, and enjoy building reliable AI solutions in
+  collaborative, cross-functional teams.
+
+What we bring to the table
+At Temedica, we break new ground in digital health and challenge the traditional healthcare
+model. We build medical applications and use artificial intelligence to translate patient
+behavior into sensible interventions. We combine our application's data with data sources
+from research, social listening and key market providers. Based on a B2B SaaS business
+model, we offer novel data monitors that secure previously unknown insights for Pharma and
+Life-sciences.
+
+- Hybrid-work policy: work from anywhere within Germany
+- Paid vacation days: 27 at full employment plus official holidays, pro rata
+- Responsibility from day one, fair and competitive salary
+- Team events and company parties

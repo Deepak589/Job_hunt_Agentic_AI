@@ -1,0 +1,46 @@
+Werkstudent (m/w/d) Generative KI und Automatisierung — SPIEGEL-Gruppe
+Hamburg · Teilzeit (bis zu 20 Std./Woche) · befristet 1 Jahr
+
+Die SPIEGEL-Gruppe benötigt zum nächstmöglichen Zeitpunkt Deine Unterstützung in Teilzeit
+(bis zu 20 Std. / Woche) zunächst befristet für 1 Jahr am Standort Hamburg als
+Werkstudent (m/w/d) Generative KI und Automatisierung.
+
+In Zusammenarbeit mit dem Team arbeitest Du an der Schnittstelle zwischen Redaktion,
+Dokumentation/Fact-Checking, IT, Produktentwicklung und Innovation. Du unterstützt uns
+dabei, generative KI sicher, sinnvoll und praktisch in den Medienalltag zu bringen.
+
+Deine Aufgaben
+- Konzeptionieren: Du unterstützt bei der Konzeptionierung von KI-gestützten Prototypen und
+  Showcases, die redaktionelle und verlegerische Workflows verbessern
+- Umsetzen: Du wirkst bei der Umsetzung kleiner Prototypen mit. Sowohl Frontend- als auch
+  Backend-seitig (z. B. kleine Web-UIs, API-Services, einfache Pipelines)
+- Experimentieren: Du hilfst dabei, strukturierte Experimente durchzuführen: Du vergleichst
+  Modelle, Tools und Frameworks und dokumentierst Ergebnisse zur Technologieauswahl
+- Testen: Du testest systematisch bestehende Systeme (Funktionalität, Qualität, UX,
+  Robustheit) und hältst Erkenntnisse nachvollziehbar fest
+- Betreiben: Du unterstützt beim Betrieb unserer bestehenden Lösungen (Monitoring,
+  Fehlersuche, kleinere Fixes) in Abstimmung mit dem Team
+- Vernetzen: Du arbeitest im Austausch mit Redaktion, Dokumentation, IT, Produkt und
+  Innovation, um Anforderungen zu verstehen und Lösungen iterativ zu verfeinern
+
+Dein Profil
+- Du studierst etwas Passendes: z. B. Informatik, Wirtschaftsinformatik, Data Science,
+  Medientechnik oder ein vergleichbares Studienfach in Vollzeit – idealerweise mit
+  Interesse an Daten, Systemen und KI
+- Du magst Logik: Du hast Spaß am analytischen Denken, arbeitest gerne strukturiert und
+  probierst Dinge pragmatisch aus – lieber kleine Schritte als große Versprechen
+- Du bringst erste Erfahrungen mit? Super! Vielleicht hast Du schon mal eine kleine
+  Web-Oberfläche gebaut, ein Skript geschrieben, eine API angebunden oder mit einem
+  KI/LLM-Service experimentiert – wenn nicht, zeigen wir Dir, wie es geht
+- Du wirkst gerne im Team mit: Du kannst Dich auf andere einstellen, arbeitest gerne mit
+  verschiedenen Menschen zusammen und schätzt interdisziplinäre Projekte
+- Du kommunizierst klar: Ob schriftlich oder mündlich – Du bringst Inhalte verständlich auf
+  den Punkt und hast keine Scheu, Ergebnisse kurz zu zeigen
+- Du verfügst über sehr gute Deutschkenntnisse (in Wort und Schrift); Englisch ist von
+  Vorteil (z. B. für Dokus und Fehlermeldungen)
+
+Wir bieten
+- Verantwortungsvolle und vielseitige Aufgaben in einem der führenden Medienhäuser
+- Individuelle Förderungs-, Entwicklungs- und Weiterbildungsangebote
+- Attraktive Zusatzleistungen (Sportclub, 75% Zuschuss Deutschland-Ticket, Kantine)
+- Moderner Arbeitsplatz in der Hafencity, mobiles Arbeiten möglich

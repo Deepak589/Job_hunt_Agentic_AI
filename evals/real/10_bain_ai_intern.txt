@@ -1,0 +1,32 @@
+AI Engineering, Intern (Berlin / Munich) — Bain & Company — Berlin, Germany
+
+WHO YOU WILL WORK WITH
+Bain's AI, Insights & Solutions (AIS) team works with clients to design and deliver AI-powered solutions that create measurable business impact. You'll operate in multidisciplinary teams alongside Bain consultants, other experts in product, design, architecture, and engineering, and client stakeholders, translating ambiguous business problems into robust AI applications.
+
+WHAT YOU'LL DO
+- Contribute to the design and development of GenAI applications (e.g., copilots, workflow automation, decision support) using modern LLM stacks.
+- Support the implementation of AI pipelines and components, including: Retrieval-Augmented Generation (RAG); Fine-tuning and parameter-efficient tuning; Embedding generation and optimization; Hybrid retrieval strategies (vector, graph, keyword)
+- Assist in implementing tool use, function calling, and orchestration across AI workflows
+- Assist in building agent capabilities including context engineering, memory and state management, orchestration, and tool integration
+- Support model experimentation, evaluation design, and production deployment tasks
+- Write clean, testable code and contribute to APIs and services through the full SDLC: build, test, deploy, monitor, iterate
+- Contribute to evaluation and observability for GenAI systems: regression test suites, automated scoring, and prompt or policy iteration loops
+- Gain exposure to responsible AI practices: guardrails, fallbacks, human-in-the-loop (HITL) workflows
+- Contribute to ML solutions end-to-end: data preparation, feature engineering, model selection, and training; validation, testing, and performance analysis; classical ML and deep learning; transformer fundamentals and LLM concepts
+- Collaborate with product, engineering, and data science teammates
+
+ABOUT YOU
+- 0–2+ years of professional AI / ML engineering experience, or equivalent through internships, research, academic projects, or open-source contributions
+- Currently pursuing or recently completed a bachelor's, master's, or PhD in CS, ML, AI, Data Science, Engineering, or a related quantitative field
+- Strong academic performance or demonstrated excellence through research, projects, internships, competitions, or open-source contributions
+- Proficiency in Python and some experience building APIs or services (e.g., REST/gRPC)
+- Experience building complex, multi-stack generative AI programs from conception through production
+- Exposure to retrieval and search systems (e.g., vector search, hybrid retrieval, reranking) and familiarity with structured and unstructured data stores
+- Exposure to agentic patterns (context management, tool integration, orchestration, memory/state handling)
+- Strong engineering practices: testing, code review, version control, CI/CD, and performance profiling
+- Excellent interpersonal and communication skills
+- Fluency in English and German is required
+
+Working Model & Travel
+- This role requires a minimum of three days per week working together in person, either at a client location or at your Bain home office.
+- Travel may be required beyond your home office / primary working location.

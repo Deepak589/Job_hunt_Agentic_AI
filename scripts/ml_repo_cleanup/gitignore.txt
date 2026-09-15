@@ -1,0 +1,25 @@
+# data - download from Kaggle, do not commit
+images/
+food_recipe/data_raw/
+data/raw/
+data/processed/
+*.npy
+*.pt
+
+# generated / tooling caches
+graphify-out/
+anaconda_projects/
+runs/
+.ipynb_checkpoints/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+
+# slides and notebook backups
+*.pptx
+*.ipynb.bak
+
+# env
+.venv/
+.env

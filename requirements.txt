@@ -1,0 +1,4 @@
+# DEPRECATED — do not use.
+# Dependencies live in pyproject.toml (locked by uv.lock).
+#   uv sync              # runtime
+#   uv sync --extra dev  # + test/lint tooling

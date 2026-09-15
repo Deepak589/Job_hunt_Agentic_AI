@@ -1,0 +1,404 @@
+# master_profile.yaml — SINGLE SOURCE OF TRUTH
+#
+# Extracted from main_cv.pdf on 2026-09-11. REVIEW EVERY FIELD before trusting it.
+#
+# Rules:
+#  - THIS FILE is authoritative on what is claimed (plan.md §5.1, §21.3). cv_data.json
+#    is a render of it and main_cv_v2.pdf is a render of that. When they disagree, this
+#    file wins and the render is regenerated — only this file can hold evidence ids,
+#    atomized metrics and never_claim, so it is the only one the validators can check.
+#  - Claude may edit this file ONLY to reconcile it with a render or on explicit
+#    instruction. It may never add a fact, metric or skill that has no source in
+#    a render, a repo, or something Deepak said (plan.md §21.3).
+#  - Facts are atomized: outcome / metric / method are separate so the rewriter can
+#    recombine them per JD, and validators/facts.py can assert every number in a
+#    generated bullet exists here (plan.md §8).
+#  - metric: null means "no honest number exists". Never fill it to make a bullet nicer.
+#  - status: not_shipped marks work that must NEVER be phrased as delivered.
+
+meta:
+  schema_version: 1
+  extracted_from: main_cv_v2.pdf (rendered from cv_data.json)   # provenance, not authority
+  extracted: 2026-09-11
+  updated: 2026-09-12   # skills reconciled against main_cv_v2.pdf
+  reviewed_by_human: true
+  open_todos: 0
+
+identity:
+  name: Deepak Katukuri
+  headline: AI / ML Engineer
+  tagline_keywords: ["AI/ML Engineer", "Cloud & MLOps", "RAG"]
+  email: deepakkatukuri@gmail.com
+  phone: "+49 1629741795"
+  location: Potsdam (Berlin area), Germany
+  github: github.com/Deepak589
+  linkedin: linkedin.com/in/deepak-katukuri
+
+constraints:
+  work_status: student
+  werkstudent_eligible: true
+  max_hours_per_week_in_term: 24
+  available_from: immediate
+  full_time_from: after MSc completion
+  requires_english_workplace: true
+  relocation: Berlin area preferred
+  languages:
+    - {name: English, level: Fluent}
+    - {name: German, level: A1/A2 (learning)}
+
+profile_summary:
+  # Source for the profile line. rewrite may reframe emphasis, never add claims.
+  core: >
+   AI/ML Engineer and Data Science MSc candidate working across Retrieval-Augmented
+   Generation, deep learning, and the cloud and MLOps layer that ships it.
+  proof_points:
+   - hand-rolled hybrid RAG retriever validated against a LangChain rebuild on a
+     55-question golden set
+   - CLIP dual-encoder trained from scratch for image-to-recipe retrieval
+   - live full-stack health app (React + FastAPI + PostgreSQL) running in production
+   - owned the Kubernetes, CI/CD and AWS layer of a 3-person cloud project
+  backing: 2.5 years of production software engineering
+  seeking: English-speaking working-student AI/ML Engineer roles in Germany
+
+# ---------------------------------------------------------------------------
+# EXPERIENCE
+# ---------------------------------------------------------------------------
+experience:
+  - id: exp.valuemomentum
+    title: Software Engineer
+    company: ValueMomentum
+    clients: [Hiscox (P&C insurance), Philadelphia Insurance (surety bonds)]
+    location: India
+    start: 2022-03
+    end: 2024-09
+    duration_years: 2.5
+    stack: [OneShield PAS, PL/SQL, SQL, CI/CD]
+    domain: [P&C insurance, surety bonds, policy administration]
+    bullets:
+      - id: exp.valuemomentum.b1
+        outcome: resolved production defects across two enterprise carrier platforms, and translated underwriting/claims requirements into technical specs
+        metric: "100+ defects; 2 carrier platforms"   # conservative floor - Deepak is sure it exceeded 100, exact count not tracked
+        method: OneShield PAS for Hiscox (P&C) and Philadelphia Insurance (surety bonds); QA/UAT execution; CI/CD deployment support
+        tags: [production-support, insurance, oneshield, defect-resolution]
+      - id: exp.valuemomentum.b2
+        outcome: migrated full policy, claims, premium and customer history for Philadelphia Insurance's Surety Bonds line from a legacy policy admin system
+        metric: null
+        method: OneShield PAS migration; built and validated PL/SQL migration scripts across customer, policy (PID), claims and premium tables
+        tags: [data-migration, pl-sql, etl, sql, validation]
+      - id: exp.valuemomentum.b3
+        outcome: root-caused a recurring data-integrity defect where claims data for pre-2019 Surety bonds under one bond type loaded empty
+        metric: null
+        method: >
+          diagnosed that the OneShield object copy from stored object to loading object silently
+          failed when another bond shared the same bond type under a different bond ID; kept
+          records current with a weekly backfill script pending a permanent fix
+        tags: [debugging, root-cause-analysis, data-integrity, sql]
+      - id: exp.valuemomentum.b4
+        outcome: translated business requirements from underwriting and claims stakeholders into technical specs, and accelerated releases
+        metric: null
+        method: sprint planning; QA/UAT test execution; CI/CD deployment support across the full policy lifecycle
+        tags: [stakeholder-communication, requirements, qa, uat, ci-cd, agile]
+
+  - id: exp.smartbridge_ibm
+    title: ML Intern
+    company: SmartBridge × IBM
+    location: India
+    start: 2019-06
+    end: 2019-07
+    stack: [Python, IBM Watson ML, Matplotlib, Seaborn]
+    bullets:
+      - id: exp.smartbridge_ibm.b1
+        outcome: built and deployed a lung-cancer risk-prediction ensemble, communicating results to non-technical reviewers
+        metric: null
+        method: Random Forest, KNN, Gradient Boosting and Neural Network ensemble; deployed via IBM Watson ML; Matplotlib/Seaborn visualizations
+        tags: [classification, ensembles, healthcare, deployment, ibm-watson, communication]
+
+# ---------------------------------------------------------------------------
+# PROJECTS
+# ---------------------------------------------------------------------------
+projects:
+  - id: proj.rag_pipeline
+    name: RAG Pipeline — Hand-Rolled Retrieval, Validated Against LangChain at Scale
+    repo: github.com/Deepak589/RAG_pipeline
+    context: personal / research build
+    stack: [Python, LangChain, BM25, dense bi-encoder, RRF, cross-encoder, pgvector, Ollama]
+    bullets:
+      - id: proj.rag_pipeline.b1
+        outcome: built a hand-rolled hybrid retriever from scratch before reaching for a framework
+        metric: "0.833 recall@5 / 0.672 MRR on a 55-question labeled golden set"
+        method: BM25 + dense bi-encoder, RRF fusion, cross-encoder reranking, across 4 iterative stages
+        tags: [rag, hybrid-retrieval, bm25, reranking, evaluation, information-retrieval]
+      - id: proj.rag_pipeline.b2
+        outcome: caught a silent recall regression from LangChain's default BM25 tokenizer and fixed it, confirming framework parity before trusting it at scale
+        metric: "0.06-recall regression; fixed to 0.854 recall@5"
+        method: rebuilt the identical retriever on LangChain over the same corpus and labels with framework as the only changed variable
+        tags: [rag, langchain, evaluation, benchmarking, debugging, ablation]
+      - id: proj.rag_pipeline.b3
+        outcome: scaled the corpus with a resumable, file-type-routed ingestion pipeline feeding a pgvector-backed dense store
+        metric: "~100x (7 to ~740 documents, ~3.5GB)"
+        method: ingestion across arXiv, SEC filings, Wikipedia and scanned PDFs; pgvector dense store
+        tags: [data-pipeline, ingestion, pgvector, vector-db, scaling, pdf-parsing]
+
+  - id: proj.ra_nutrition
+    name: RA Nutrition & Lifestyle App — Full-Stack Health Automation
+    repo: github.com/Deepak589/RA_project
+    live_url: https://ra-project-indol.vercel.app      # verified live 2026-09-11
+    context: personal product build, publicly deployed
+    stack: [React, Vite, Tailwind CSS, React Query, FastAPI, PostgreSQL 16, SQLAlchemy,
+            Alembic, Recharts, JWT, Docker, Docker Compose, Vercel, Render, pytest]
+    integrations: [USDA FoodData Central API]
+    bullets:
+      - id: proj.ra_nutrition.b1
+        outcome: translated operational health-tracking needs into a shipped full-stack feature
+        metric: "4 logical schemas"
+        method: React/Vite/Tailwind frontend over a FastAPI + PostgreSQL backend, with JWT auth and token refresh
+        tags: [full-stack, react, fastapi, postgresql, auth, product]
+      - id: proj.ra_nutrition.b2
+        outcome: built a rule-based recommendation engine and weekly analytics dashboard closing the loop from raw meal/symptom logs to actionable output
+        metric: null
+        method: rule-based engine; Recharts analytics dashboard
+        tags: [recommendation, analytics, dashboard, data-viz, product]
+      - id: proj.ra_nutrition.b4
+        outcome: shipped the app publicly as a split-tier deployment, live and reachable on the web
+        metric: null
+        method: >
+          React frontend on Vercel; FastAPI backend deployed as a Docker container on Render with a
+          /health check endpoint, generated SECRET_KEY, and JWT HS256 auth (30-min access /
+          30-day refresh tokens)
+        evidence_url: https://ra-project-indol.vercel.app
+        tags: [deployment, docker, vercel, render, devops, hosting, jwt, production]
+      - id: proj.ra_nutrition.b5
+        outcome: containerised the full local development stack so the environment reproduces with one command
+        metric: "3 services"
+        method: >
+          Docker Compose running the FastAPI service, PostgreSQL 16 gated by a pg_isready healthcheck
+          via depends_on condition, and an optional pgAdmin profile; Alembic migrations applied
+          automatically on container start; named volume for database persistence
+        tags: [docker, docker-compose, postgresql, alembic, migrations, devops, reproducibility]
+      - id: proj.ra_nutrition.b6
+        outcome: integrated an external nutrition data source to ground recommendations in real food data
+        metric: null
+        method: USDA FoodData Central API
+        tags: [api-integration, data-sourcing, nutrition]
+      - id: proj.ra_nutrition.b3
+        status: not_shipped          # NEVER phrase as delivered
+        outcome: architected an ML forecasting tier for flare-risk prediction, scoping the next iteration before building it
+        metric: null
+        method: scikit-learn/XGBoost and PyTorch LSTM/GRU/TCN designs
+        tags: [time-series, forecasting, architecture, scoping]
+
+  - id: proj.cloudnotes
+    name: CloudNotes — Kubernetes & AWS Deployment Platform
+    repo: github.com/Deepak589/cloudnotes
+    context: MSc cloud computing coursework — team of 3
+    authorship: team                # confirmed 2026-09-12. Repo is a fork of a teammate's
+                                    # (SujithKumar01) — that is how the project was shared.
+    team_size: 3
+    my_components: [kubernetes, ci_cd, aws_infrastructure]
+    their_components: [flask_app, pymysql_data_layer, dockerfile]
+    framing_rule: >
+      Every bullet must make the team context visible and claim only the infrastructure,
+      orchestration and delivery layer Deepak owned. Never phrase as solo work, and never claim
+      the Flask application or the Dockerfile. An interviewer can open this repo.
+    stack: [AWS EC2, AWS RDS, K3s Kubernetes, Docker Hub, GitHub Actions, Traefik,
+            Ubuntu 22.04, Docker buildx]
+    bullets:
+      - id: proj.cloudnotes.b1
+        owner: mine
+        outcome: took a team Flask + MySQL application from a container image to a self-healing, autoscaling Kubernetes deployment on AWS
+        metric: "2-5 replicas, HPA triggering at 60% CPU"
+        method: >
+          owned the Kubernetes layer on a 3-person coursework team: authored the Deployment with
+          CPU/memory requests and limits, ClusterIP Service, Traefik Ingress, HorizontalPodAutoscaler
+          and readiness/liveness probes, with credentials injected from Kubernetes Secrets rather
+          than baked into the image
+        tags: [kubernetes, k3s, hpa, autoscaling, ingress, traefik, probes, secrets, devops, teamwork]
+      - id: proj.cloudnotes.b2
+        owner: mine
+        outcome: automated zero-downtime rolling deployments from a git push, removing manual deployment steps for the team
+        metric: "2 target architectures (linux/amd64, linux/arm64)"
+        method: >
+          built the GitHub Actions pipeline: Docker buildx multi-architecture build (ARM64 dev
+          machines, x86-64 target), push to Docker Hub, SSH to EC2, kubectl set image, with
+          kubectl rollout status as the verification gate
+        tags: [ci-cd, github-actions, buildx, multi-arch, automation, rolling-deployment, devops]
+      - id: proj.cloudnotes.b3
+        owner: mine
+        outcome: provisioned the AWS environment and chose K3s over managed Kubernetes after costing both, documenting the trade-off
+        metric: "~$86/month (EC2 t3.medium $31.97 + RDS db.t4g.micro $54.13 + transfer)"
+        method: >
+          provisioned EC2 t3.medium with Elastic IP, VPC and security-group rules, and Amazon RDS
+          MySQL; installed K3s with bundled Traefik and metrics-server, avoiding managed
+          control-plane and separate ingress-controller cost on a single-node workload
+        tags: [aws, ec2, rds, vpc, security-groups, cost-optimization, architecture, finops, linux]
+
+  - id: proj.food_retrieval
+    name: Food Image-to-Recipe Retrieval — Multimodal Deep Learning
+    repo: github.com/Deepak589/ML_Final_project    # verified 2026-09-13
+    context: MSc coursework - ML course final project
+    stack: [PyTorch, CLIP ViT-B/32, DistilBERT, InfoNCE, FAISS, OmegaConf]
+    note: >
+      The repo holds TWO systems. (a) a zero-shot pipeline using both CLIP encoders with
+      FAISS search and an ingredient-fusion weight - this is the one with measured results
+      in outputs/retrieval_results.csv and outputs/fusion_comparison.csv. (b) a trained
+      dual-encoder in src/ (frozen CLIP images + DistilBERT text, symmetric InfoNCE).
+      Never merge their numbers into one claim.
+    bullets:
+      - id: proj.food_retrieval.b1
+        outcome: built an image-to-recipe retrieval system and measured it in both directions instead of reporting only the flattering one
+        metric: "3,000-recipe database; 61% Recall@10 and median rank 6 image-to-recipe; 55% Recall@10 and median rank 8 recipe-to-image"
+        method: >
+          encoded images and recipe text into CLIP's shared 512-d space, L2-normalised, with
+          FAISS inner-product search at inference; evaluated Recall@1/5/10 and medR in both
+          directions (source: outputs/retrieval_results.csv)
+        tags: [multimodal, clip, faiss, retrieval, evaluation, embeddings, information-retrieval]
+
+      - id: proj.food_retrieval.b2
+        outcome: raised retrieval accuracy by sweeping the recipe-text vs ingredient fusion weight rather than picking one by feel
+        metric: "Recall@10 41.9% -> 61.0% across alpha 0.3/0.5/0.7/0.9; Recall@1 13.4% -> 22.4%"
+        method: >
+          ablated the blend weight between full recipe-text embeddings and ingredient-only
+          embeddings over 4 values, selected alpha 0.9 on measured Recall@K
+          (source: outputs/fusion_comparison.csv)
+        tags: [ablation, hyperparameter-search, evaluation, experimentation, retrieval]
+
+      - id: proj.food_retrieval.b3
+        outcome: built a second, trained dual-encoder variant with a config-driven experiment harness and a real test suite
+        metric: "58 tests; 3 switchable fusion modes; 13,582 images cached; ~10x faster training"
+        method: >
+          frozen CLIP ViT-B/32 image encoder and DistilBERT recipe-text encoder with separate
+          ingredient/instruction streams, projected to a shared 1024-d space and trained with
+          symmetric InfoNCE (temperature 0.07); OmegaConf configs with CLI overrides; concat,
+          cross-attention and ingredients-only modes; AMP, gradient accumulation, early stopping;
+          CLIP features precomputed once and cached rather than re-encoded every epoch
+        caveat: >
+          this trained variant reported medR 10 of 200 val recipes on a 2,000-recipe local run
+          over 6 epochs. Do NOT attach that number to the 13,582 figure, and do NOT mix it with
+          the zero-shot results in b1/b2.
+        tags: [pytorch, contrastive-learning, distilbert, testing, reproducibility, mlops, caching]
+
+# ---------------------------------------------------------------------------
+# EDUCATION / CERTIFICATIONS
+# ---------------------------------------------------------------------------
+education:
+  - id: edu.msc
+    degree: MSc Data Science
+    institution: University of Europe
+    location: Germany
+    start: 2025-09
+    end: null
+    status: in_progress
+  - id: edu.btech
+    degree: BTech — Computer Science & Engineering
+    institution: MLRIT
+    location: India
+    start: 2018-06
+    end: 2022-07
+    status: completed
+
+certifications:
+  - {id: cert.plsql,  name: "PL/SQL — Database Management"}
+  - {id: cert.java,   name: "Core Java — Software Development"}
+  - {id: cert.osh,    name: "OneShield — P&C Insurance"}
+
+# ---------------------------------------------------------------------------
+# SKILLS
+# ---------------------------------------------------------------------------
+# evidence: ids of bullets that demonstrate the skill. [] means CLAIMED BUT UNEVIDENCED.
+# The hiring_manager node (plan.md §7 role 5) flags unevidenced skills as
+# indefensible under interview follow-up. Either build evidence or drop the claim.
+skills:
+  languages:
+    - {name: Python,    level: expert,     evidence: [proj.rag_pipeline.b1, proj.food_retrieval.b1, exp.smartbridge_ibm.b1]}
+    - {name: SQL,       level: expert,     evidence: [exp.valuemomentum.b2, exp.valuemomentum.b3]}
+    - {name: PL/SQL,    level: proficient, evidence: [exp.valuemomentum.b2]}
+    - {name: Core Java, level: familiar,   evidence: []}
+    - {name: Flask,     level: proficient, evidence: [proj.cloudnotes.b1]}
+    - {name: MySQL,     level: proficient, evidence: [proj.cloudnotes.b1]}          # cert only
+    - {name: C++,       level: familiar,   evidence: []}
+
+  deep_learning:
+    - {name: PyTorch,       level: proficient, evidence: [proj.food_retrieval.b1, proj.ra_nutrition.b3]}
+    - {name: TensorFlow,    level: familiar,   evidence: []}
+    - {name: CNNs,          level: proficient, evidence: [proj.food_retrieval.b1]}
+    - {name: EfficientNet,  level: familiar,   evidence: []}
+    - {name: fine-tuning,   level: proficient, evidence: [proj.food_retrieval.b1]}
+    - {name: timm,          level: familiar,   evidence: []}
+    - {name: Hugging Face,  level: proficient, evidence: [proj.food_retrieval.b1]}
+    - {name: transformers,  level: proficient, evidence: [proj.food_retrieval.b1]}
+
+  llm_rag:
+    - {name: Retrieval-Augmented Generation, level: expert,     evidence: [proj.rag_pipeline.b1, proj.rag_pipeline.b2]}
+    - {name: LangChain,           level: proficient, evidence: [proj.rag_pipeline.b2]}
+    - {name: hybrid retrieval,    level: expert,     evidence: [proj.rag_pipeline.b1]}
+    - {name: reranking,           level: proficient, evidence: [proj.rag_pipeline.b1]}
+    - {name: pgvector,            level: proficient, evidence: [proj.rag_pipeline.b3]}
+    - {name: CLIP,                level: proficient, evidence: [proj.food_retrieval.b1]}
+    - {name: DistilBERT,          level: proficient, evidence: [proj.food_retrieval.b1]}
+    - {name: sentence-transformers, level: proficient, evidence: [proj.rag_pipeline.b1]}
+    - {name: contrastive learning,  level: proficient, evidence: [proj.food_retrieval.b1]}
+    - {name: embeddings,          level: proficient, evidence: [proj.rag_pipeline.b3, proj.food_retrieval.b1]}
+    - {name: Ollama,              level: familiar,   evidence: []}
+
+  full_stack:
+    - {name: React,        level: proficient, evidence: [proj.ra_nutrition.b1]}
+    - {name: Vite,         level: proficient, evidence: [proj.ra_nutrition.b1]}
+    - {name: Tailwind CSS, level: proficient, evidence: [proj.ra_nutrition.b1]}
+    - {name: PostgreSQL,   level: proficient, evidence: [proj.ra_nutrition.b1, proj.ra_nutrition.b5, proj.rag_pipeline.b3]}
+    - {name: FastAPI,      level: proficient, evidence: [proj.ra_nutrition.b1]}
+    - {name: Recharts,     level: proficient, evidence: [proj.ra_nutrition.b2]}
+    - {name: SQLAlchemy,   level: proficient, evidence: [proj.ra_nutrition.b5]}
+    - {name: Alembic,      level: proficient, evidence: [proj.ra_nutrition.b5]}
+    - {name: JWT,          level: proficient, evidence: [proj.ra_nutrition.b1, proj.ra_nutrition.b4]}
+    - {name: REST APIs,    level: proficient, evidence: [proj.ra_nutrition.b1, proj.ra_nutrition.b3, proj.ra_nutrition.b4]}
+    - {name: API integration, level: proficient, evidence: [proj.ra_nutrition.b3]}
+    - {name: API,          level: proficient, evidence: [proj.ra_nutrition.b1, proj.ra_nutrition.b3]}
+
+  machine_learning:
+    - {name: Scikit-Learn,   level: proficient, evidence: [exp.smartbridge_ibm.b1]}
+    - {name: classification, level: proficient, evidence: [exp.smartbridge_ibm.b1]}
+    - {name: ensembles,      level: proficient, evidence: [exp.smartbridge_ibm.b1]}
+    - {name: NumPy,          level: proficient, evidence: []}
+    - {name: Pandas,         level: proficient, evidence: []}
+    - {name: Matplotlib,     level: proficient, evidence: [exp.smartbridge_ibm.b1]}
+    - {name: Seaborn,        level: proficient, evidence: [exp.smartbridge_ibm.b1]}
+
+  mlops_cloud:
+    - {name: Docker,           level: proficient, evidence: [proj.ra_nutrition.b4, proj.ra_nutrition.b5, proj.cloudnotes.b2]}
+    - {name: Kubernetes,       level: proficient, evidence: [proj.cloudnotes.b1]}
+    - {name: AWS,              level: proficient, evidence: [proj.cloudnotes.b1, proj.cloudnotes.b3]}
+    - {name: CI/CD,            level: proficient, evidence: [exp.valuemomentum.b4, proj.cloudnotes.b2]}
+    - {name: GitHub Actions,   level: proficient, evidence: [proj.cloudnotes.b2]}
+    - {name: AWS EC2,          level: proficient, evidence: [proj.cloudnotes.b1]}
+    - {name: AWS RDS,          level: proficient, evidence: [proj.cloudnotes.b1]}
+    - {name: Linux (Ubuntu),   level: proficient, evidence: [proj.cloudnotes.b1]}
+    - {name: Docker Compose,   level: proficient, evidence: [proj.ra_nutrition.b5]}
+    - {name: Vercel,           level: proficient, evidence: [proj.ra_nutrition.b4]}
+    - {name: Render,           level: proficient, evidence: [proj.ra_nutrition.b4]}
+    - {name: model deployment, level: proficient, evidence: [exp.smartbridge_ibm.b1, proj.ra_nutrition.b4]}
+
+  tools:
+    - {name: Git/GitHub,  level: proficient, evidence: []}
+    - {name: pytest,      level: proficient, evidence: [proj.ra_nutrition.b5]}   # pytest.ini in RA_project
+    - {name: Jupyter,     level: proficient, evidence: []}
+    - {name: IBM Watson,  level: familiar,   evidence: [exp.smartbridge_ibm.b1]}
+
+# ---------------------------------------------------------------------------
+# VALIDATOR INPUTS (plan.md §8)
+# ---------------------------------------------------------------------------
+# Every numeric token a generated bullet may contain must appear here.
+# Derived from the bullets above — regenerate with `jobpilot profile sync`, don't hand-edit.
+allowed_metrics:
+  ["2", "2.5 years", "0.833", "0.672", "55", "0.06", "0.854", "100x", "7", "740",
+   "3.5GB", "4", "1024", "10/200", "13.5K", "10x", "200", "pre-2019", "5",
+   "3", "16", "30", "60", "86", "31.97", "54.13", "100+", "13,582", "2K", "2,000", "58", "6",
+   "3,000", "61", "61.0", "55", "8", "41.9", "13.4", "22.4", "0.9", "512", "0.07"]
+
+# Claims the system must never make on your behalf.
+never_claim:
+  - German professional fluency (actual: A1/A2)
+  - full-time availability before MSc completion
+  - production deployment of the RA Nutrition ML forecasting tier (not built)
+  - commercial/production ML experience (ML work to date is projects + one 2019 internship)
+  - sole authorship of CloudNotes - it is a team project; bullets must say so
+  - any exact ticket/defect count above the "100+" floor - the precise number was never tracked

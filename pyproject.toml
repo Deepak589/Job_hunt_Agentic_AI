@@ -1,0 +1,60 @@
+[project]
+name = "agentic-ai"
+version = "0.1.0"
+description = "JobPilot — multi-agent job search and CV tailoring"
+readme = "README.md"
+authors = [
+    { name = "Deepak589", email = "carzydeepak31@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    # orchestration
+    "langgraph>=0.6",
+    "langgraph-checkpoint-sqlite>=2.0",
+    "langchain-core>=1.0",
+    "langchain-anthropic>=1.5.6",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    # retrieval
+    "sentence-transformers>=3.3",
+    "chromadb>=0.5",
+    # ingest
+    "httpx>=0.28",
+    "tenacity>=9.0",
+    "trafilatura>=2.0",
+    "extruct>=0.17",
+    "lingua-language-detector>=2.0",
+    # storage & output
+    "ruamel.yaml>=0.18",
+    "typst>=0.11",
+    # ops
+    "structlog>=24.4",
+    "typer>=0.15",
+    "rich>=13.9",
+    "python-dotenv>=1.2.3",
+]
+
+[project.optional-dependencies]
+tracing = ["langfuse>=2.53"]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "ipykernel>=7.3.0",
+]
+
+[project.scripts]
+jobpilot = "agentic_ai.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.mypy]
+strict = true
+plugins = ["pydantic.mypy"]

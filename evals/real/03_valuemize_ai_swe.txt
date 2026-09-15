@@ -1,0 +1,28 @@
+AI Software Engineer / Data Science - Intern/WS (f/m/d) — valuemize — Munich, Bavaria, Germany
+
+Join valuemize. valuemize is redefining how Europe's manufacturing industry designs, builds, and prices physical products. We're creating a new software category between ERP and PLM - Lifecycle Cost Intelligence.
+
+About the Role
+As an AI Software Engineer / Data Scientist Intern or Working Student at valuemize, you'll work at the heart of our product, building and experimenting with AI and data components that make cost and product data actionable for engineers and business users alike. You'll collaborate closely with our Co-Founder & CTO.
+
+Our Tech Stack
+- Frontend: React / Next.js (Full-Stack App)
+- Backend: Node.js / TypeScript / SQL / Postgres / Prisma ORM
+- Infrastructure: Kubernetes, Docker, CI/CD
+- AI/ML: Python, data pipelines, LLM integrations
+
+What You'll Do
+- Build and experiment with AI/ML components for cost prediction, anomaly detection and data analysis
+- Develop and maintain data pipelines connecting ERP, PLM and external data sources
+- Collaborate with product, engineering, and customer teams to translate manufacturing challenges into intelligent software features
+- Take ownership of projects and contribute to engineering best practices
+
+Who You Are
+- Currently studying Computer Science, Data Science, AI or a related field.
+- Vast experience in building with AI, analyzing complex data structures and applying it in real products
+- Strong experience with TypeScript / Node.js / Next.js or similar modern stacks
+- You have a quality mindset and understand the importance of test automation
+- Comfortable with high pace and ambiguity, you enjoy shipping fast & improving continuously
+- You think like an engineer and a product builder: balancing clean code with customer impact
+
+Location: Munich. Start: Immediate. Package: Competitive compensation.

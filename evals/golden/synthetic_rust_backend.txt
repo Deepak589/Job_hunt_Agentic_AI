@@ -1,0 +1,24 @@
+Backend Engineer (Rust) — Berlin, Germany
+
+About the role
+We are building a high-throughput payments ledger and are looking for a backend engineer
+to own core services.
+
+What you will do
+- Design and implement services in Rust, our primary backend language
+- Operate Kafka-based event streams in production
+- Work with Scala for parts of our data platform
+
+What you bring
+- 4+ years of professional backend engineering experience
+- Strong, demonstrable Rust experience — this is a hard requirement for the role
+- Production experience with Apache Kafka
+- Experience with Kubernetes
+- Fluent German (C1 minimum) — our engineering team works in German day to day
+- You must be legally authorized to work in Germany
+
+Nice to have
+- Experience in fintech or payments
+- Interest in formal verification
+
+We offer a hybrid working model out of our Berlin office.

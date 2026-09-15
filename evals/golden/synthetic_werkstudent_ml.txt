@@ -1,0 +1,31 @@
+Working Student — AI/ML Engineer (m/f/d)
+Berlin, Germany · Part-time, 20h/week · English-speaking team
+
+About us
+We are a small team building retrieval-based search products for enterprise customers.
+Our working language is English.
+
+Your responsibilities
+- Build and evaluate retrieval-augmented generation pipelines over customer documents
+- Work with our Python codebase and write SQL against PostgreSQL
+- Containerize services with Docker and help maintain our CI/CD pipelines
+- Measure retrieval quality and report results to the team
+
+What we are looking for
+- Currently enrolled in a Master's programme in Computer Science, Data Science or similar
+- Solid Python skills — this is our primary language
+- Experience with SQL and relational databases
+- Hands-on experience with LLMs, embeddings or vector search
+- Familiarity with Docker
+- You are available 20 hours per week during the semester
+- You are legally allowed to work as a working student in Germany
+
+Nice to have
+- Experience with PyTorch or Hugging Face
+- Exposure to AWS
+- Interest in evaluation methodology and benchmarking
+- Frontend experience with React
+
+What we offer
+Flexible hours around your lectures, a mentor from day one, and the option to move to a
+full-time role after graduation.

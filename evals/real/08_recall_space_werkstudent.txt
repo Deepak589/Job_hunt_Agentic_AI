@@ -1,0 +1,30 @@
+Werkstudent Software Development (AI / Full Stack) — Recall Space Agents — Mannheim, Baden-Württemberg, Germany
+
+Recall Space entwickelt die nächste Generation von KI-Mitarbeitern für Einkauf und Vertrieb. Unsere AI-Agentin Lisa automatisiert Bestell- und Auftragsprozesse und unterstützt Unternehmen im operativen Tagesgeschäft. Mit unseren agentbasierten Systemen helfen wir Unternehmen, Prozesse effizienter zu gestalten.
+
+Aufgaben
+- Unterstützung bei der Entwicklung unserer AI-gestützten Plattform
+- Mitarbeit an Backend-Services mit Python oder Node.js
+- Unterstützung bei der Entwicklung moderner Webinterfaces mit React
+- Testing, Debugging und Weiterentwicklung bestehender Features
+- Unterstützung beim Aufbau und der Weiterentwicklung unserer Cloud-Infrastruktur auf Azure
+- Recherche zu neuen AI-Tools, Frameworks und Technologien
+- Enge Zusammenarbeit mit unserem Development-Team
+
+Tech Stack
+- Python, Node.js, React, Azure, PostgreSQL & MongoDB, moderne LLM- und AI-Frameworks
+
+Qualifikation
+- Laufendes Studium der Informatik, Wirtschaftsinformatik oder eines vergleichbaren Studiengangs
+- Erste Programmiererfahrung (z. B. durch Uni-Projekte, eigene Projekte oder Praktika)
+- Interesse an AI, Automatisierung und modernen Softwarearchitekturen
+- Motivation, neue Technologien zu lernen und dich aktiv einzubringen
+- Selbstständige und strukturierte Arbeitsweise
+- Gute Englischkenntnisse in Wort und Schrift
+
+Bonuspunkte für:
+- Erste Erfahrungen mit Python, JavaScript oder React
+- Interesse an AI- oder LLM-Technologien
+- Eigene Coding-Projekte oder GitHub-Profil
+
+Benefits: Modernes Office mitten in den Mannheimer Quadraten, moderne Hardware, direkte Zusammenarbeit mit erfahrenen Entwicklern und Gründern, Mitarbeit an echten AI-Produkten. Zusammenarbeit überwiegend vor Ort.
