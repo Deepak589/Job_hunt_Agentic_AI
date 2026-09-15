@@ -13,10 +13,17 @@ Three checks, each catching a distinct way a rewrite can lie:
    for, is the single most likely hallucination (the model sees "Kubernetes" in the JD and
    wants to please, and Kubernetes being a real skill elsewhere on the CV does not make it
    true of *this* accomplishment). Scoped to the cited bullet's own evidence — a skill's
-   `evidence` list, or its parent experience/project's `stack` — not a profile-wide
-   gazetteer, or a real skill evidenced by a different job would pass as evidence for this
-   one. Prose with no citation (the cover letter) has no single bullet to scope to, so it
-   is checked against profile-wide evidence instead.
+   `evidence` list, its parent experience/project's `stack`, OR a word that genuinely
+   appears in that bullet's own `outcome`/`method` text — not a profile-wide gazetteer, or
+   a real skill evidenced by a different job would pass as evidence for this one. Prose
+   with no citation (the cover letter) has no single bullet to scope to, so it is checked
+   against profile-wide evidence instead (skills, stack, AND every bullet's own text).
+   Only HARD and DISQUALIFIER requirement keywords are checked here — a SOFT nice-to-have
+   is exactly the kind of generic, non-committal term ("data", "learning", "analytical")
+   an extractor tags loosely; flagging it at the same severity as a hard-requirement
+   fabrication produced false positives in live testing (2026-09-15) with no real
+   fabrication behind them. The caller (`nodes/validate_facts.py`) filters by type before
+   calling this function.
 
 A fourth check runs over the whole draft (bullets + cover letter): an unclaimable-fluency
 language claim, reusing the exact language-fluency logic `coverage.py` already built for
@@ -56,17 +63,30 @@ def _contains_term(text: str, term: str) -> bool:
     return bool(pattern.search(text))
 
 
+def _bullet_text_tokens(b) -> set[str]:
+    """Every word actually appearing in this bullet's own outcome/method text.
+
+    Widens "evidence" past skill/stack names to the bullet's real description — a JD
+    keyword the model echoes ("data", "analysis") is not a fabrication if that word is
+    literally what this accomplishment already says. Word-level, not phrase-level: this
+    only helps single-word terms, which is exactly the class of false positive it fixes.
+    """
+    return set(_normalize(f"{b.outcome} {b.method}").split())
+
+
 def _local_tech(profile: Profile, source_bullet_id: str) -> set[str]:
     """Tech evidenced by this specific real bullet — not the whole profile.
 
-    Union of skill names whose `evidence` names this bullet and its parent
-    experience/project's `stack` list, normalized so it compares like-for-like with a
-    normalized JD term. A bogus `source_bullet_id` (caught separately) evidences
-    nothing, which is the right answer here too.
+    Union of skill names whose `evidence` names this bullet, its parent
+    experience/project's `stack` list, and every word in the bullet's own outcome/method
+    text — normalized so it compares like-for-like with a normalized JD term. A bogus
+    `source_bullet_id` (caught separately) evidences nothing, which is the right answer
+    here too.
     """
     tech = {_normalize(s.name) for s in profile.skills if source_bullet_id in s.evidence}
     b = profile.by_id(source_bullet_id)
     if b:
+        tech |= _bullet_text_tokens(b)
         for section in ("experience", "projects"):
             for entry in profile.raw.get(section, []):
                 if entry["id"] == b.parent_id:
@@ -96,6 +116,8 @@ def validate_facts(draft: Draft, profile: Profile, jd_keywords: list[str] = ()) 
     bullet_ids = profile.bullet_ids
     allowed_metrics = profile.all_metrics()
     allowed_tech = {_normalize(t) for t in profile.all_tech() | profile.all_stack()}
+    for b in profile.bullets:
+        allowed_tech |= _bullet_text_tokens(b)
 
     for section, bullets in draft.bullets.items():
         for b in bullets:

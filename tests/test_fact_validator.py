@@ -114,3 +114,26 @@ def test_clean_multi_bullet_draft_passes(profile: Profile) -> None:
         cover_letter="Excited to apply my Python and FastAPI experience.",
     )
     assert validate_facts(d, profile, jd_keywords=["python", "fastapi"]) == []
+
+
+def test_jd_keyword_evidenced_by_the_cited_bullets_own_text_is_not_flagged(profile: Profile) -> None:
+    """Widened evidence (2026-09-15 live-testing finding): a JD term is not a fabrication
+    if the CITED bullet's own outcome/method already says that word, even if it's not a
+    formal skill/stack entry. exp.smartbridge_ibm.b1's method text literally contains
+    "visualizations" — a generic word an extractor is likely to tag as a JD keyword."""
+    real = profile.by_id("exp.smartbridge_ibm.b1")
+    assert real is not None and "visualizations" in real.method
+    d = _draft("Communicated results via clear visualizations.", None, real.id, section="experience")
+    errors = validate_facts(d, profile, jd_keywords=["visualization"])
+    assert errors == []
+
+
+def test_jd_keyword_not_in_cited_bullets_own_text_still_flagged(profile: Profile) -> None:
+    """Widening evidence to the bullet's own text must not become a blanket pass — a term
+    genuinely absent from both the bullet's stack/skill evidence AND its own outcome/method
+    text is still a fabrication."""
+    real = profile.by_id("exp.valuemomentum.b1")
+    assert real is not None
+    d = _draft("Deployed the fix using Kubernetes.", None, real.id)
+    errors = validate_facts(d, profile, jd_keywords=["kubernetes"])
+    assert any("kubernetes" in e.lower() for e in errors)
