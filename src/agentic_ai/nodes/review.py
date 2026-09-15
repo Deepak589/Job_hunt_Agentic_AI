@@ -25,7 +25,9 @@ def _prompt() -> str:
 
 @functools.lru_cache(maxsize=1)
 def _model():
-    llm = ChatAnthropic(model=settings.review_model, temperature=0, max_tokens=2048)
+    # claude-sonnet-5 rejects an explicit `temperature` — the param is deprecated for
+    # this model (confirmed live: "`temperature` is deprecated for this model").
+    llm = ChatAnthropic(model=settings.review_model, max_tokens=2048)
     return llm.with_structured_output(ReviewResult, include_raw=True)
 
 
