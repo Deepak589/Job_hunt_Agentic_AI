@@ -189,6 +189,42 @@ after the Phase 1 gap report, plus an `artifacts:` block naming the rendered PDF
    `jobpilot add --file evals/golden/real_temedica_ws_agentic.txt --location "Munich, Germany"`
    with a real key configured and read the output critically.
 
+5. **`highlighted_projects` is written by `rewrite` and read by nothing** — `render.py`,
+   `scoring/ats.py`, and `cli.py` all ignore it. Either surface it somewhere (e.g. an ATS
+   component, or a CLI print line) or drop the field — currently dead weight (final
+   whole-branch review, minor, deferred).
+6. **`fact_gate` returns `Literal[...]`, `review_gate` returns bare `str`** — naming/typing
+   drift between the two gates that route the same retry loop. Harmless today; worth
+   tightening if either gate grows more branches (final whole-branch review, minor,
+   deferred).
+7. **`classify_role` (an LLM call) runs again on every rewrite retry for the same JD** —
+   `lru_cache` covers `_model`, not the call itself, so a review- or fact-triggered retry
+   pays for an extra Haiku call to re-derive a role that cannot have changed. Cache by
+   `jd_text` if retry volume ever makes this worth it (final whole-branch review, minor,
+   deferred).
+
+### Fixed in the final whole-branch review pass
+
+Two Critical + three Important findings surfaced by the final cross-cutting review, all
+fixed and re-reviewed clean before merge:
+- `Draft.section_order` was LLM-freestyle despite the "deterministic dict lookup, never
+  LLM freestyle" rule — `rewrite()` now forces the classifier's `order` back onto the
+  returned `Draft`.
+- Section order never reached the rendered PDF (Task 3's whole classifier mechanism
+  changed nothing about the document) — `render.py` now builds an ordered `main_sections`
+  list from `draft.section_order`, and `cv_two_column.typ` renders from it instead of a
+  hardcoded projects-then-experience sequence.
+- `ats.py`'s `gates_failed()` duplicated the disqualifier check and dropped the `unknown`
+  carve-out, which would have zeroed the score of otherwise-strong applications with an
+  unrecorded fact (e.g. a semester count) — now reuses `state.unmet_disqualifiers()`.
+- Review-triggered rewrite retries were blind rerolls (weaknesses only logged to `notes`,
+  never fed back to `rewrite`'s prompt) — `review()` now returns them via
+  `validation_errors`, gated to only fire when a retry will actually happen (so a clean
+  proceeding draft's `no_fabrication` gate is never touched by non-blocking weaknesses).
+- The three LLM prompts told the model to call tools (`emit_diagnosis`/`emit_draft`/
+  `emit_review`) that don't exist — `with_structured_output` names tools after the actual
+  Pydantic classes (`Diagnosis`/`Draft`/`ReviewResult`); prompts now match.
+
 ### Carried into Phase 3 (per plan.md §16)
 
 - `recruiter_sim` and `hiring_manager` nodes (roles 4 and 5 of the five-role pipeline;
