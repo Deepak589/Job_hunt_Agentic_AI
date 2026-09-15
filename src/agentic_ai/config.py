@@ -52,6 +52,17 @@ class Settings(BaseSettings):
 
     # --- models (§12 routing) ---
     extract_model: str = "claude-haiku-4-5-20251001"  # requirement extraction, cheap + structured
+    role_classifier_model: str = "claude-haiku-4-5-20251001"  # cheap, enum output only
+    diagnose_model: str = "claude-sonnet-5"
+    rewrite_model: str = "claude-sonnet-5"
+    review_model: str = "claude-sonnet-5"
+
+    # --- rewrite loop ---
+    # CLAUDE.md Reviewer agent: "Max 2 loops — after that, ship best version and flag
+    # remaining weakness in plain text rather than looping forever." One counter shared
+    # by the fact-validator retry and the review-score retry.
+    max_rewrite_attempts: int = 2
+    min_review_score: int = 7  # below this, retry rewrite (if attempts remain)
 
 
 settings = Settings()
