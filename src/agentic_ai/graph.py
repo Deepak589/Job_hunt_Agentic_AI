@@ -20,6 +20,7 @@ from .coverage import hard_gap_gate, log_skip, retrieve_evidence, score_coverage
 from .nodes.diagnose import diagnose
 from .nodes.requirements import extract_requirements
 from .nodes.rewrite import rewrite
+from .nodes.validate_facts import fact_gate, log_fact_failure, validate_facts_node
 from .state import Job, JobState
 
 
@@ -42,6 +43,8 @@ def build_graph():
     g.add_node("log_skip", log_skip)
     g.add_node("diagnose", diagnose)
     g.add_node("rewrite", rewrite)
+    g.add_node("validate_facts", validate_facts_node)
+    g.add_node("log_fact_failure", log_fact_failure)
 
     g.set_entry_point("load_job")
     g.add_edge("load_job", "extract_requirements")
