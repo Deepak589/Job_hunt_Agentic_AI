@@ -97,7 +97,7 @@ class Scores(BaseModel):
     hard_coverage: float = 0.0  # 0..1, deterministic
     soft_coverage: float = 0.0  # 0..1, deterministic
     semantic_fit: float = 0.0  # 0..1, mean best-similarity across requirements
-    # Phase 2+: review_score, recruiter, verdict
+    review_score: int | None = None  # 1..10, filled by the review node
 
 
 class JobState(BaseModel):
