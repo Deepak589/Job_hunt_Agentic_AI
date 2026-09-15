@@ -24,4 +24,4 @@ rewrite pass.
 `weaknesses`: specific, actionable. Not "could be stronger" — name the exact bullet or
 section and what is wrong with it.
 
-Call `emit_review` exactly once.
+Call the `ReviewResult` tool exactly once.

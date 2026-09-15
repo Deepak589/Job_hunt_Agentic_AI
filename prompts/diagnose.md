@@ -42,4 +42,4 @@ You are given:
 
 ## Output
 
-Call `emit_diagnosis` exactly once.
+Call the `Diagnosis` tool exactly once.

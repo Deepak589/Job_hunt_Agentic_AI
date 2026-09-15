@@ -24,8 +24,12 @@ class ParsedPdf(BaseModel):
 def gates_failed(state: JobState) -> dict[str, bool]:
     """Only entries that FAILED — an empty dict means every gate passed."""
     gates = {
+        # By the time score_ats runs, state.validation_errors is always empty — the
+        # graph's fact_gate/log_fact_failure edges already sent a fabricated draft to
+        # END before render_documents/score_ats ever run. This is defense-in-depth,
+        # not the primary enforcement.
         "no_fabrication": not state.validation_errors,
-        "no_disqualifiers": not any(r.type == "disqualifier" and not r.covered for r in state.requirements),
+        "no_disqualifiers": not state.unmet_disqualifiers(),
     }
     return {name: passed for name, passed in gates.items() if not passed}
 
@@ -69,9 +73,6 @@ def ats_score(state: JobState, pdf: ParsedPdf, profile: Profile) -> AtsScore:
     hard_covered = sum(r.covered for r in hard)
 
     evidenced_terms = {kw for r in state.requirements for kw in r.keywords if r.covered}
-    verbatim_hits = sum(
-        1 for r in state.requirements for kw in r.keywords if r.covered and kw.lower() in evidenced_terms
-    ) if evidenced_terms else 0
 
     all_bullets = [b for bullets in (state.draft.bullets.values() if state.draft else []) for b in bullets]
     metric_available = sum(1 for b in all_bullets if profile.by_id(b.source_bullet_id) and profile.by_id(b.source_bullet_id).metric)

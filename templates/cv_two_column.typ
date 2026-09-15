@@ -119,28 +119,32 @@
     #mainhead("Profile")
     #text(size: 8.5pt)[#d.profile]
 
-    #mainhead("Projects")
-    #for p in d.projects {
-      block(below: 7.5pt, breakable: false)[
-        #text(size: 9.3pt, weight: "bold", fill: ink)[#p.title]
-        #v(1.2pt)
-        #text(size: 7.4pt, fill: muted, style: "italic")[#p.meta]
-        #v(2.6pt)
-        #bullets(p.bullets)
-      ]
-    }
-
-    #mainhead("Experience")
-    #for e in d.experience {
-      block(below: 7.5pt, breakable: false)[
-        #grid(columns: (1fr, auto),
-          text(size: 9pt, weight: "bold", fill: ink)[#e.title],
-          text(size: 7.8pt, fill: muted)[#e.dates])
-        #v(0.6pt)
-        #text(size: 8.2pt, weight: "bold", fill: muted)[#e.org]
-        #v(2.6pt)
-        #bullets(e.bullets)
-      ]
+    #for section in d.main_sections {
+      if section.kind == "projects" {
+        mainhead("Projects")
+        for p in section.items {
+          block(below: 7.5pt, breakable: false)[
+            #text(size: 9.3pt, weight: "bold", fill: ink)[#p.title]
+            #v(1.2pt)
+            #text(size: 7.4pt, fill: muted, style: "italic")[#p.meta]
+            #v(2.6pt)
+            #bullets(p.bullets)
+          ]
+        }
+      } else if section.kind == "experience" {
+        mainhead("Experience")
+        for e in section.items {
+          block(below: 7.5pt, breakable: false)[
+            #grid(columns: (1fr, auto),
+              text(size: 9pt, weight: "bold", fill: ink)[#e.title],
+              text(size: 7.8pt, fill: muted)[#e.dates])
+            #v(0.6pt)
+            #text(size: 8.2pt, weight: "bold", fill: muted)[#e.org]
+            #v(2.6pt)
+            #bullets(e.bullets)
+          ]
+        }
+      }
     }
   ]
 )

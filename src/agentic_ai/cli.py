@@ -121,7 +121,10 @@ def _report(state, verbose: bool = False) -> None:
 
     if state.skip_reason:
         console.print(f"\n[bold red]SKIP[/bold red] — {state.skip_reason}")
-        console.print("[dim]No drafting call was made. Build the missing evidence, or move on.[/dim]")
+        if state.draft is None:
+            console.print("[dim]No drafting call was made. Build the missing evidence, or move on.[/dim]")
+        else:
+            console.print("[dim]Drafting was attempted but failed fact-checking; see errors above.[/dim]")
     else:
         gaps = state.uncovered_hard()
         console.print("\n[bold green]PROCEED[/bold green] — "

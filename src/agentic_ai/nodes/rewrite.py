@@ -65,7 +65,7 @@ def rewrite(state: JobState, verbose: bool = False) -> dict:
                 print(result["raw"].content)
             if result["parsing_error"]:
                 raise ValueError(result["parsing_error"])
-            draft = result["parsed"]
+            draft = result["parsed"].model_copy(update={"section_order": order})
             return {
                 "draft": draft,
                 "attempt_count": state.attempt_count + 1,

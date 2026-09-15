@@ -49,4 +49,4 @@ that was not flagged.
 
 ## Output
 
-Call `emit_draft` exactly once.
+Call the `Draft` tool exactly once.

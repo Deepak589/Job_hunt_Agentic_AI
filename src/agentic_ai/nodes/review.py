@@ -51,7 +51,16 @@ def review(state: JobState, verbose: bool = False) -> dict:
             note = f"review: {verdict.score}/10"
             if verdict.weaknesses:
                 note += " — " + "; ".join(verdict.weaknesses)
-            return {"scores": scores, "notes": [note]}
+            # Only feed weaknesses back into validation_errors when review_gate will
+            # actually retry — otherwise a proceed-path draft with minor noted
+            # weaknesses would wrongly trip score_ats's no_fabrication gate, which
+            # reads validation_errors as "did fact-checking fail".
+            will_retry = verdict.score < settings.min_review_score and state.attempt_count < settings.max_rewrite_attempts
+            return {
+                "scores": scores,
+                "validation_errors": verdict.weaknesses if will_retry else [],
+                "notes": [note],
+            }
         except Exception as exc:  # noqa: BLE001 — retried once, then surfaced
             last_error = exc
 

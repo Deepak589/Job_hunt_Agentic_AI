@@ -14,11 +14,11 @@ from datetime import datetime
 
 from typst import compile as typst_compile
 
-from .config import settings
+from .config import ROOT, settings
 from .profile import Profile
 from .state import Draft, Job, JobState
 
-OUT_DIR = settings.chroma_path.parent.parent / "out"
+OUT_DIR = ROOT / "out"
 
 
 def _fmt_month(ym: str | None) -> str:
@@ -84,6 +84,11 @@ def build_cv_render_data(draft: Draft, profile: Profile) -> dict:
         "profile": draft.profile_line,
         "projects": section_block("projects"),
         "experience": section_block("experience"),
+        "main_sections": [
+            {"kind": kind, "items": section_block(kind)}
+            for kind in draft.section_order
+            if kind in ("projects", "experience")
+        ],
     }
 
 
@@ -110,30 +115,34 @@ def render_documents(state: JobState) -> dict:
     cv_json_path = settings.profile_path.parent / f"_render_{state.job.id}_cv.json"
     cv_json_path.write_text(json.dumps(cv_data, indent=2))
     cv_pdf = job_dir / "cv.pdf"
-    # root="/" — Typst treats any leading-"/" path (including our absolute OS paths
-    # passed via sys_inputs) as root-relative, so root must be the real filesystem
-    # root for an absolute sys_inputs path to resolve to itself rather than being
-    # re-prefixed onto some other root. Template-relative assets (e.g. "assets/photo.jpg",
-    # no leading slash) are unaffected — those resolve relative to the .typ file itself.
-    typst_compile(
-        str(settings.prompts_dir.parent / "templates" / "cv_two_column.typ"),
-        output=str(cv_pdf),
-        sys_inputs={"data": str(cv_json_path)},
-        root="/",
-    )
-    cv_json_path.unlink()
+    try:
+        # root="/" — Typst treats any leading-"/" path (including our absolute OS paths
+        # passed via sys_inputs) as root-relative, so root must be the real filesystem
+        # root for an absolute sys_inputs path to resolve to itself rather than being
+        # re-prefixed onto some other root. Template-relative assets (e.g. "assets/photo.jpg",
+        # no leading slash) are unaffected — those resolve relative to the .typ file itself.
+        typst_compile(
+            str(settings.prompts_dir.parent / "templates" / "cv_two_column.typ"),
+            output=str(cv_pdf),
+            sys_inputs={"data": str(cv_json_path)},
+            root="/",
+        )
+    finally:
+        cv_json_path.unlink()
 
     letter_data = build_cover_letter_render_data(state.draft, profile, state.job)
     letter_json_path = settings.profile_path.parent / f"_render_{state.job.id}_letter.json"
     letter_json_path.write_text(json.dumps(letter_data, indent=2))
     letter_pdf = job_dir / "cover_letter.pdf"
-    typst_compile(
-        str(settings.prompts_dir.parent / "templates" / "cover_letter.typ"),
-        output=str(letter_pdf),
-        sys_inputs={"data": str(letter_json_path)},
-        root="/",
-    )
-    letter_json_path.unlink()
+    try:
+        typst_compile(
+            str(settings.prompts_dir.parent / "templates" / "cover_letter.typ"),
+            output=str(letter_pdf),
+            sys_inputs={"data": str(letter_json_path)},
+            root="/",
+        )
+    finally:
+        letter_json_path.unlink()
 
     return {
         "artifacts": {"cv_pdf": str(cv_pdf), "cover_pdf": str(letter_pdf)},
