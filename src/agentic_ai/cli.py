@@ -42,6 +42,7 @@ def add(
         False, "--full-time", help="Full-time search: lift the werkstudent weekly-hours cap."
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Print prompts and raw responses."),
+    no_render: bool = typer.Option(False, "--no-render", help="Stop after review; skip PDF render + ATS score."),
 ) -> None:
     """Run one job description through the gap report."""
     if file:
@@ -65,6 +66,7 @@ def add(
         company=company,
         location=location,
         employment_type="fulltime" if full_time else "werkstudent",
+        _skip_render=no_render,
     )
     _report(state, verbose=verbose)
     raise typer.Exit(1 if state.skip_reason else 0)
@@ -126,6 +128,30 @@ def _report(state, verbose: bool = False) -> None:
                       f"{sum(r.covered for r in state.hard())}/{len(state.hard())} hard requirements covered")
         if gaps:
             console.print(f"[yellow]Remaining gap to address in the rewrite:[/yellow] {gaps[0].text}")
+
+    if state.diagnosis and not state.skip_reason:
+        console.print("\n[bold]DIAGNOSIS[/bold]")
+        if state.diagnosis.hard_gaps:
+            console.print("[red]hard gaps:[/red] " + "; ".join(state.diagnosis.hard_gaps))
+        if state.diagnosis.positioning_mismatch:
+            console.print(f"[yellow]positioning:[/yellow] {state.diagnosis.positioning_mismatch}")
+        if state.diagnosis.matches:
+            console.print("[green]matches:[/green] " + "; ".join(state.diagnosis.matches[:5]))
+
+    if state.draft:
+        console.print(f"\n[bold]DRAFT[/bold]  ({state.attempt_count} attempt(s))")
+        console.print(f"profile line: {state.draft.profile_line}")
+        console.print(f"sections: {' -> '.join(state.draft.section_order)}")
+        if state.scores.review_score is not None:
+            console.print(f"review score: {state.scores.review_score}/10")
+
+    if state.ats:
+        console.print(f"\n{state.ats.report}")
+
+    if state.artifacts:
+        console.print("[bold]artifacts:[/bold]")
+        for k, v in state.artifacts.items():
+            console.print(f"  {k}: {v}")
 
     if verbose:
         console.print("\n[dim]trace:[/dim]")

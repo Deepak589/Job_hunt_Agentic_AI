@@ -52,7 +52,7 @@ def load_job(state: JobState) -> dict:
     return {"notes": [f"loaded job {j.id} — {j.title or '(untitled)'} @ {j.company or '(unknown)'}"]}
 
 
-def build_graph():
+def build_graph(skip_render: bool = False):
     g = StateGraph(JobState)
     g.add_node("load_job", load_job)
     g.add_node("extract_requirements", extract_requirements)
@@ -83,14 +83,19 @@ def build_graph():
         {"retry": "rewrite", "clean": "review", "give_up": "log_fact_failure"},
     )
     g.add_edge("log_fact_failure", END)
-    g.add_conditional_edges("review", review_gate, {"retry": "rewrite", "proceed": "render_documents"})
-    g.add_edge("render_documents", "score_ats")
-    g.add_edge("score_ats", END)
+    g.add_conditional_edges(
+        "review", review_gate,
+        {"retry": "rewrite", "proceed": END if skip_render else "render_documents"},
+    )
+    if not skip_render:
+        g.add_edge("render_documents", "score_ats")
+        g.add_edge("score_ats", END)
     return g.compile()
 
 
 def run(jd_text: str, title: str = "", company: str = "", **job_fields) -> JobState:
     """Run one JD through the graph and return the final state."""
+    skip_render = job_fields.pop("_skip_render", False)
     job = Job(
         id=job_id(jd_text),
         source=job_fields.pop("source", "manual"),
@@ -99,4 +104,4 @@ def run(jd_text: str, title: str = "", company: str = "", **job_fields) -> JobSt
         jd_text=jd_text,
         **job_fields,
     )
-    return JobState.model_validate(build_graph().invoke(JobState(job=job)))
+    return JobState.model_validate(build_graph(skip_render=skip_render).invoke(JobState(job=job)))
