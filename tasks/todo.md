@@ -194,32 +194,38 @@ after the Phase 1 gap report, plus an `artifacts:` block naming the rendered PDF
    evidence on the Mubea JD; `validate_facts` retried twice, still failed, and correctly
    routed to `log_fact_failure` instead of rendering — exactly the guardrail's designed
    behavior, observed for the first time against a real model).
-5. **New finding from that same live run: the fact validator's JD-keyword check is
-   trigger-happy on generic single-word terms** ("data", "learning", "cloud", "r",
-   "analytical") — `extract_requirements` emits these as `keywords` verbatim from the
-   JD, and `validate_facts` treats ANY JD keyword as requiring specific tech evidence,
-   even words that aren't really naming a technology. This produced several
-   fact-validation failures across the batch that read more like false positives than
-   real fabrication (e.g. flagging "learning" as unevidenced when the profile clearly
-   has Machine Learning skills — just not under that exact single-word token). No fix
-   applied yet — this needs a design decision (filter stopword-like JD keywords before
-   they reach `validate_facts`? require a minimum keyword length? exempt words that
-   overlap `KEYWORD_FILLER` from `coverage.py`?) rather than an ad hoc patch. **None of
-   the 10 live jobs reached `render_documents`/`score_ats`** in this run — either
-   Phase-1-skipped or blocked here — so those two nodes are still only verified via
-   Task 8/9's structural tests, not a real live end-to-end render+score. Re-run against
-   a wider/less German-heavy job pool, or loosen this check, to get a first real
-   render+score sample.
+5. **Fixed (same day): the fact validator's JD-keyword check was trigger-happy on
+   generic single-word terms** ("data", "learning", "cloud") — `validate_facts_node`
+   now only forwards HARD/DISQUALIFIER requirement keywords (soft keywords never reach
+   the check), and `_local_tech`/the cover-letter's `allowed_tech` now also count a word
+   as evidenced if it genuinely appears in the cited bullet's own `outcome`/`method`
+   text, not just formal skill/stack entries. Re-run against the same 3 real JDs that
+   originally produced the false positives (ACCURE, Mubea, Bundesbank) — all three now
+   clear `validate_facts` and reach `render_documents`/`score_ats` for the first time,
+   producing real PDFs (verified nonzero, valid PDF files) and real ATS scores.
+6. **New finding from that first successful render+score run: `ats_score()` never
+   factors in `review_score` at all.** All 3 jobs that reached scoring got a
+   near-perfect ATS total (97.8, 99.1, 74.1) and 2 of 3 recommended "apply" — despite
+   the `review` node (a demanding LLM judge) scoring the SAME draft only 4-5/10 on all
+   three. The 5-component ATS formula (hard coverage, literal keywords, PDF
+   parseability, quantification, positioning) has no path for a low review score to
+   pull the total down, so a draft the judge flagged as weak can still score
+   "apply." Combined with finding #2 above (the "literal keywords" component being
+   binary 0/20), most of the 5 components are easy near-max once a draft merely
+   clears the fabrication gate — `hard req coverage` (50 pts) is the only component
+   with real spread across these 3 runs. Not fixed — this is a rubric/spec question
+   (should `review_score` be a 6th component? at what weight?) for whoever owns
+   plan.md §6, not an implementation bug to patch ad hoc.
 
-5. **`highlighted_projects` is written by `rewrite` and read by nothing** — `render.py`,
+7. **`highlighted_projects` is written by `rewrite` and read by nothing** — `render.py`,
    `scoring/ats.py`, and `cli.py` all ignore it. Either surface it somewhere (e.g. an ATS
    component, or a CLI print line) or drop the field — currently dead weight (final
    whole-branch review, minor, deferred).
-6. **`fact_gate` returns `Literal[...]`, `review_gate` returns bare `str`** — naming/typing
+8. **`fact_gate` returns `Literal[...]`, `review_gate` returns bare `str`** — naming/typing
    drift between the two gates that route the same retry loop. Harmless today; worth
    tightening if either gate grows more branches (final whole-branch review, minor,
    deferred).
-7. **`classify_role` (an LLM call) runs again on every rewrite retry for the same JD** —
+9. **`classify_role` (an LLM call) runs again on every rewrite retry for the same JD** —
    `lru_cache` covers `_model`, not the call itself, so a review- or fact-triggered retry
    pays for an extra Haiku call to re-derive a role that cannot have changed. Cache by
    `jd_text` if retry volume ever makes this worth it (final whole-branch review, minor,
