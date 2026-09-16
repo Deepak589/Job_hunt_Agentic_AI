@@ -1,0 +1,130 @@
+# master_profile.example.yaml — SANITIZED EXAMPLE
+#
+# Shows the schema `data/master_profile.yaml` uses (that real file is gitignored —
+# it holds your actual name, contact info, employers and metrics). Copy this to
+# data/master_profile.yaml and replace every field with your own evidence.
+#
+# Rules (see CLAUDE.md for the full spec):
+#  - This file is the single source of truth. cv_data.json and the rendered PDF
+#    are both derived from it, never the other way around.
+#  - Facts are atomized: outcome / metric / method are separate so the rewriter
+#    can recombine them per JD, and the fact validator can check every number
+#    in a generated bullet against allowed_metrics below.
+#  - metric: null means "no honest number exists" — never invent one.
+#  - status: not_shipped marks work that must never be phrased as delivered.
+
+meta:
+  schema_version: 1
+  extracted_from: null
+  extracted: 2026-01-01
+  updated: 2026-01-01
+  reviewed_by_human: true
+  open_todos: 0
+
+identity:
+  name: Jane Example
+  headline: Data Scientist
+  tagline_keywords: ["Data Science", "Machine Learning", "Analytics"]
+  email: jane.example@email.com
+  phone: "+49 1234567890"
+  location: Berlin, Germany
+  github: github.com/jane-example
+  linkedin: linkedin.com/in/jane-example
+
+constraints:
+  work_status: student
+  werkstudent_eligible: true
+  max_hours_per_week_in_term: 20
+  available_from: immediate
+  full_time_from: after MSc completion
+  requires_english_workplace: true
+  relocation: Berlin preferred
+  languages:
+    - {name: English, level: Fluent}
+    - {name: German, level: B1}
+
+profile_summary:
+  core: >
+   Data Scientist and MSc candidate working across machine learning, data
+   pipelines, and analytics.
+  proof_points:
+   - built and evaluated a classification model against a labeled test set
+   - shipped a small full-stack app with a public deployment
+  backing: 1 year of software engineering
+  seeking: English-speaking working-student Data Science roles in Germany
+
+# ---------------------------------------------------------------------------
+# EXPERIENCE
+# ---------------------------------------------------------------------------
+experience:
+  - id: exp.example_co
+    title: Software Engineer
+    company: Example Co
+    clients: []
+    location: Germany
+    start: 2023-01
+    end: 2024-06
+    duration_years: 1.5
+    stack: [Python, SQL, CI/CD]
+    domain: [example-domain]
+    bullets:
+      - id: exp.example_co.b1
+        outcome: resolved production defects and translated requirements into technical specs
+        metric: "50+ defects"
+        method: Python/SQL debugging; QA execution; CI/CD deployment support
+        tags: [production-support, debugging]
+
+# ---------------------------------------------------------------------------
+# PROJECTS
+# ---------------------------------------------------------------------------
+projects:
+  - id: proj.example_classifier
+    name: Example Classifier — Model Evaluation
+    repo: github.com/jane-example/example-classifier
+    context: personal / coursework build
+    stack: [Python, scikit-learn, pandas]
+    bullets:
+      - id: proj.example_classifier.b1
+        outcome: built and evaluated a classifier against a labeled test set
+        metric: "82% accuracy on a 500-row held-out set"
+        method: scikit-learn RandomForest; train/test split; cross-validation
+        tags: [classification, evaluation, scikit-learn]
+
+# ---------------------------------------------------------------------------
+# EDUCATION / CERTIFICATIONS
+# ---------------------------------------------------------------------------
+education:
+  - id: edu.msc
+    degree: MSc Data Science
+    institution: Example University
+    location: Germany
+    start: 2024-09
+    end: null
+    status: in_progress
+
+certifications:
+  - {id: cert.example, name: "Example Certification"}
+
+# ---------------------------------------------------------------------------
+# SKILLS
+# ---------------------------------------------------------------------------
+# evidence: ids of bullets that demonstrate the skill. [] means CLAIMED BUT UNEVIDENCED.
+skills:
+  languages:
+    - {name: Python, level: proficient, evidence: [proj.example_classifier.b1]}
+    - {name: SQL,    level: proficient, evidence: [exp.example_co.b1]}
+
+  machine_learning:
+    - {name: scikit-learn, level: proficient, evidence: [proj.example_classifier.b1]}
+    - {name: pandas,       level: proficient, evidence: []}
+
+# ---------------------------------------------------------------------------
+# VALIDATOR INPUTS
+# ---------------------------------------------------------------------------
+# Every numeric token a generated bullet may contain must appear here.
+allowed_metrics: ["50+", "82", "500", "1.5 years"]
+
+# Claims the system must never make on your behalf.
+never_claim:
+  - full-time availability before MSc completion
+  - commercial ML experience beyond what's evidenced above

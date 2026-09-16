@@ -16,5 +16,12 @@ data/chroma/
 out/
 .pytest_cache/
 
+# personal data — see data/*.example.* for the schema
+data/master_profile.yaml
+data/cv_data.json
+main_cv.pdf
+main_cv_v2.pdf
+templates/assets/photo.jpg
+
 # macOS
 .DS_Store

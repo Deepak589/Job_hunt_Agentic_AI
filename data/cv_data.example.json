@@ -1,0 +1,50 @@
+{
+  "name": "JANE EXAMPLE",
+  "tagline": [
+    "DATA SCIENTIST",
+    "MACHINE LEARNING",
+    "ANALYTICS"
+  ],
+  "photo": "assets/photo.jpg",
+  "contact": [
+    ["mail", "jane.example@email.com"],
+    ["phone", "+49 1234567890"],
+    ["pin", "Berlin, Germany"],
+    ["link", "github.com/jane-example"],
+    ["link", "linkedin.com/in/jane-example"]
+  ],
+  "skills": [
+    ["Languages", "Python, SQL"],
+    ["Machine Learning", "scikit-learn, pandas, classification, evaluation"]
+  ],
+  "education": [
+    ["MSc Data Science", "Example University, Germany", "Sep 2024 – Present"]
+  ],
+  "certifications": [
+    "Example Certification"
+  ],
+  "languages": [
+    ["English", "Fluent"],
+    ["German", "B1"]
+  ],
+  "profile": "Data Scientist and MSc candidate working across machine learning, data pipelines, and analytics. Built and evaluated a classifier against a labeled test set, reaching 82% accuracy. Looking for English-speaking working student (Werkstudent) Data Science roles in Germany.",
+  "projects": [
+    {
+      "title": "Example Classifier: Model Evaluation",
+      "meta": "Python · scikit-learn · pandas · github.com/jane-example/example-classifier",
+      "bullets": [
+        "Built and evaluated a RandomForest classifier against a 500-row labeled held-out set, reaching 82% accuracy, using scikit-learn with cross-validation."
+      ]
+    }
+  ],
+  "experience": [
+    {
+      "title": "Software Engineer",
+      "org": "Example Co",
+      "dates": "Jan 2023 – Jun 2024",
+      "bullets": [
+        "Resolved 50+ production defects and translated business requirements into technical specs, using Python/SQL debugging, QA execution and CI/CD deployment support."
+      ]
+    }
+  ]
+}
