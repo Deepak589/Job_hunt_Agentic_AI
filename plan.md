@@ -424,11 +424,10 @@ deduction: fabrication cannot be offset by scoring well elsewhere.
 
 | # | Component | Pts | Formula |
 |---|---|---|---|
-| 1 | Hard requirement coverage | 50 | `50 × covered(hard) ÷ count(hard)` — from `score_coverage()` above |
-| 2 | Literal keyword match | 20 | `20 × verbatim_hits ÷ evidenced_jd_terms` |
+| 1 | Hard requirement coverage | 55 | `55 × covered(hard) ÷ count(hard)` — from `score_coverage()` above. Folds in the old 5-pt "positioning" component (below), which only checked `section_order` was non-empty — near-constant, dropped rather than kept as noise. |
+| 2 | Literal keyword match | 20 | `20 × verbatim_hits ÷ evidenced_jd_terms` — `verbatim_hits` counts evidenced terms found literally in the RENDERED PDF's extracted text, not just "evidenced" (that denominator-equals-numerator bug scored this component a constant 20 regardless of the CV; fixed 2026-09-20, solution.md step 4) |
 | 3 | PDF parseability | 15 | `15 × fields_recovered ÷ fields_expected` — name, email, phone, location, every section heading, every skill |
 | 4 | Quantification (X-Y-Z) | 10 | `10 × bullets_with_metric ÷ bullets_metric_available` |
-| 5 | Positioning match | 5 | section order matches JD role type (§7) AND profile line targets it → 5, else 0 |
 
 **Thresholds**
 
@@ -444,11 +443,10 @@ def ats_score(state: JobState, pdf_fields: ParsedPDF) -> AtsScore:
     if gates_failed(state):                       # fabrication or disqualifier
         return AtsScore(total=0.0, gates=..., verdict="skip")
     pts = (
-        50 * frac(covered(hard_reqs), hard_reqs)          # §6 coverage
-      + 20 * frac(verbatim_hits, evidenced_jd_terms)      # denominator = evidenced only
+        55 * frac(covered(hard_reqs), hard_reqs)          # §6 coverage, positioning folded in
+      + 20 * frac(verbatim_hits, evidenced_jd_terms)      # verbatim_hits = evidenced terms found in pdf_fields.text
       + 15 * frac(pdf_fields.recovered, pdf_fields.expected)
       + 10 * frac(bullets_with_metric, bullets_metric_available)
-      +  5 * (section_order_matches(state) and profile_line_targets(state))
     )
     return AtsScore(total=pts, verdict=verdict_for(pts))  # >=95 apply, 90-94 fix, <90 skip
 ```
@@ -494,11 +492,10 @@ GATES
   JD disqualifiers .......... 0 ✓
 
 POINTS
-  hard req coverage ......  7/7   → 50.0
+  hard req coverage ......  7/7   → 55.0
   literal keywords ....... 11/12  → 18.3
   pdf parseability ....... 14/14  → 15.0
   quantification .........  8/9   →  8.9
-  positioning ............ match  →  5.0
                                    ─────
                                     97.2
 

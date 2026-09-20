@@ -20,6 +20,7 @@ from ..state import AtsScore, AtsVerdict, JobState
 class ParsedPdf(BaseModel):
     recovered: int
     expected: int
+    text: str = ""  # extracted PDF text, lowercased-compared against evidenced JD terms
 
 
 def gates_failed(state: JobState) -> dict[str, bool]:
@@ -65,7 +66,7 @@ def parse_pdf(pdf_path: Path, profile: Profile) -> ParsedPdf:
             expected += 1
             if s["name"].lower() in text.lower():
                 recovered += 1
-    return ParsedPdf(recovered=recovered, expected=expected)
+    return ParsedPdf(recovered=recovered, expected=expected, text=text)
 
 
 def ats_score(state: JobState, pdf: ParsedPdf, profile: Profile) -> AtsScore:
@@ -74,17 +75,20 @@ def ats_score(state: JobState, pdf: ParsedPdf, profile: Profile) -> AtsScore:
     hard_covered = sum(r.covered for r in hard)
 
     evidenced_terms = {kw for r in state.requirements for kw in r.keywords if r.covered}
+    pdf_text_lower = pdf.text.lower()
+    verbatim_hits = sum(1 for kw in evidenced_terms if kw.lower() in pdf_text_lower)
 
     all_bullets = [b for bullets in (state.draft.bullets.values() if state.draft else []) for b in bullets]
     metric_available = sum(1 for b in all_bullets if profile.by_id(b.source_bullet_id) and profile.by_id(b.source_bullet_id).metric)
     metric_present = sum(1 for b in all_bullets if b.metric)
 
     components = {
-        "hard req coverage": 50 * _frac(hard_covered, len(hard)) if hard else 50.0,
-        "literal keywords": 20 * _frac(len(evidenced_terms), max(len(evidenced_terms), 1)),
+        # positioning folded in here (plan.md §6): was its own 5-pt component that only
+        # checked section_order was non-empty — near-constant, same as literal keywords was.
+        "hard req coverage": 55 * _frac(hard_covered, len(hard)) if hard else 55.0,
+        "literal keywords": 20 * _frac(verbatim_hits, len(evidenced_terms)) if evidenced_terms else 20.0,
         "pdf parseability": 15 * _frac(pdf.recovered, pdf.expected),
         "quantification": 10 * _frac(metric_present, max(metric_available, 1)) if metric_available else 10.0,
-        "positioning": 5.0 if state.draft and state.draft.section_order else 0.0,
     }
     total = 0.0 if failed else round(sum(components.values()), 1)
 

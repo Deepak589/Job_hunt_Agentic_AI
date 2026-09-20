@@ -64,11 +64,26 @@ def test_a_failed_gate_zeroes_the_total_regardless_of_points() -> None:
 def test_clean_high_coverage_state_scores_high_and_reports_counts() -> None:
     profile = _profile()
     s = _clean_state(review_score=9)
-    pdf = ParsedPdf(recovered=14, expected=14)
+    pdf = ParsedPdf(recovered=14, expected=14, text="python rag experience")
     result = ats_score(s, pdf, profile)
     assert result.total > 0
     assert "hard req coverage" in result.report
     assert result.gates == {"no_fabrication": True, "no_disqualifiers": True}
+
+
+def test_literal_keywords_component_separates_drafts_with_equal_coverage() -> None:
+    """plan.md §6 / solution.md step 4: two drafts with identical requirement coverage
+    must NOT score identically — one has the evidenced JD keywords literally in the
+    rendered PDF text, the other doesn't."""
+    profile = _profile()
+    s = _clean_state(review_score=9)
+    pdf_with_keywords = ParsedPdf(recovered=14, expected=14, text="Built a python RAG pipeline.")
+    pdf_without_keywords = ParsedPdf(recovered=14, expected=14, text="Built a retrieval pipeline.")
+    with_kw = ats_score(s, pdf_with_keywords, profile)
+    without_kw = ats_score(s, pdf_without_keywords, profile)
+    assert with_kw.total - without_kw.total >= 10
+    assert with_kw.components["literal keywords"] == 20.0
+    assert without_kw.components["literal keywords"] == 0.0
 
 
 def test_low_review_score_caps_total_below_apply() -> None:
