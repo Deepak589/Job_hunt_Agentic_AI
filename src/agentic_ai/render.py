@@ -10,7 +10,9 @@ replaces on a per-job basis). Rendering itself calls the `typst` PyPI package's
 from __future__ import annotations
 
 import json
+import tempfile
 from datetime import datetime
+from pathlib import Path
 
 from typst import compile as typst_compile
 
@@ -112,8 +114,9 @@ def render_documents(state: JobState) -> dict:
     job_dir.mkdir(parents=True, exist_ok=True)
 
     cv_data = build_cv_render_data(state.draft, profile)
-    cv_json_path = settings.profile_path.parent / f"_render_{state.job.id}_cv.json"
-    cv_json_path.write_text(json.dumps(cv_data, indent=2))
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        json.dump(cv_data, f, indent=2)
+        cv_json_path = Path(f.name)
     cv_pdf = job_dir / "cv.pdf"
     try:
         # root="/" — Typst treats any leading-"/" path (including our absolute OS paths
@@ -131,8 +134,9 @@ def render_documents(state: JobState) -> dict:
         cv_json_path.unlink()
 
     letter_data = build_cover_letter_render_data(state.draft, profile, state.job)
-    letter_json_path = settings.profile_path.parent / f"_render_{state.job.id}_letter.json"
-    letter_json_path.write_text(json.dumps(letter_data, indent=2))
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        json.dump(letter_data, f, indent=2)
+        letter_json_path = Path(f.name)
     letter_pdf = job_dir / "cover_letter.pdf"
     try:
         typst_compile(

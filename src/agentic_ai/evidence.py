@@ -110,12 +110,17 @@ def build_index(profile: Profile | None = None, force: bool = False) -> int:
 
 
 def retrieve_many(
-    queries: list[str], k: int | None = None, collection: Collection | None = None
+    queries: list[str], k: int | None = None, collection: Collection | None = None, use_rerank: bool = False
 ) -> list[list[Evidence]]:
     """Top-k bullets for each query, most similar first. One batched encode, one query.
 
     Batched because a JD yields 12-18 requirements and encoding them one at a time is
     that many forward passes through bge-m3 for no reason.
+
+    `rerank=False` by default — the hot path (coverage.py, every job run) re-sorts by
+    cosine `similarity` anyway (see comment below), so loading the cross-encoder there
+    bought nothing but latency. Only `calibrate()` needs the reranked order, to compare
+    cosine-top-1 vs cross-encoder-top-1.
     """
     if not queries:
         return []
@@ -141,6 +146,8 @@ def retrieve_many(
             res["ids"], res["documents"], res["distances"], res["metadatas"]
         )
     ]
+    if not use_rerank:
+        return groups
     # Reorder each group by cross-encoder score. Harmless downstream: coverage.py's
     # retrieve_evidence merges evidence across subqueries and re-sorts by `similarity`
     # (cosine) before applying the top_k cutoff, so the coverage gate's evidence selection
@@ -149,9 +156,11 @@ def retrieve_many(
     return [rerank(q, group) for q, group in zip(queries, groups)]
 
 
-def retrieve(query: str, k: int | None = None, collection: Collection | None = None) -> list[Evidence]:
+def retrieve(
+    query: str, k: int | None = None, collection: Collection | None = None, use_rerank: bool = False
+) -> list[Evidence]:
     """Top-k bullets for one requirement, most similar first."""
-    return retrieve_many([query], k=k, collection=collection)[0]
+    return retrieve_many([query], k=k, collection=collection, use_rerank=use_rerank)[0]
 
 
 # --------------------------------------------------------------------- calibration
@@ -200,7 +209,7 @@ def calibrate(collection: Collection | None = None) -> dict[str, object]:
     # below recovers the same cosine top-1 that k=1 used to return directly (chroma already
     # returns nearest-first, so the argmax over a top-k pool == the top-1 of a top-1 query),
     # so the cosine-only calibration below is unchanged by this.
-    hits = retrieve_many([q for q, _ in PROBES], k=settings.top_k, collection=collection)
+    hits = retrieve_many([q for q, _ in PROBES], k=settings.top_k, collection=collection, use_rerank=True)
     measured = [
         (q, expected, max(group, key=lambda e: e.similarity), group[0])
         for (q, expected), group in zip(PROBES, hits)

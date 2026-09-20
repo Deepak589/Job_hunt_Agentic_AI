@@ -7,6 +7,7 @@ scripts/profile_sync.py — agrees on what the profile contains.
 
 from __future__ import annotations
 
+import functools
 import re
 from pathlib import Path
 
@@ -82,8 +83,17 @@ class Profile(BaseModel):
 
     @classmethod
     def load(cls, path: Path | None = None) -> Profile:
+        """Every node in the graph calls this once per job — cache on (path, mtime_ns)
+        so a run re-parses the same YAML once instead of once per node, and an edit to
+        master_profile.yaml between runs still invalidates it (no stale cache to clear)."""
+        resolved = path or settings.profile_path
+        return cls._load_cached(resolved, resolved.stat().st_mtime_ns)
+
+    @classmethod
+    @functools.lru_cache(maxsize=8)
+    def _load_cached(cls, path: Path, mtime_ns: int) -> Profile:
         yaml = YAML(typ="safe")
-        raw = yaml.load((path or settings.profile_path).read_text())
+        raw = yaml.load(path.read_text())
 
         bullets: list[Bullet] = []
         for section in ("experience", "projects"):

@@ -132,14 +132,15 @@ def add(
             title=title, company=company, location=location,
             employment_type="fulltime" if full_time else "werkstudent",
         )
+        # A skip (hard-gap gate, disqualifier) is an expected verdict, not a failure —
+        # asyncio.gather has no return_exceptions=True, so a job that actually errors
+        # propagates as an uncaught exception here and exits non-zero on its own.
         states = asyncio.run(run_many(jd_texts, _skip_render=no_render, **job_fields))
-        any_skipped = False
         for state in states:
             persist_run(state)
             _log_run(state)
             _report(state, verbose=verbose)
-            any_skipped = any_skipped or bool(state.skip_reason)
-        raise typer.Exit(1 if any_skipped else 0)
+        raise typer.Exit(0)
 
     if file:
         jd_text = file.read_text()
