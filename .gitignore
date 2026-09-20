@@ -13,6 +13,8 @@ wheels/
 
 # JobPilot generated
 data/chroma/
+data/checkpoints.db*
+data/jobpilot.db
 out/
 .pytest_cache/
 

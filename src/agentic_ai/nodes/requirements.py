@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import functools
 
-from langchain_anthropic import ChatAnthropic
 from pydantic import BaseModel, Field
 
 from ..config import settings
+from ..costs import record_usage
+from ..llm import make_llm
 from ..state import JobState, ReqType, Requirement
 
 
@@ -50,12 +51,14 @@ def _prompt() -> str:
 
 @functools.lru_cache(maxsize=1)
 def _model():
-    llm = ChatAnthropic(model=settings.extract_model, temperature=0, max_tokens=4096)
+    llm = make_llm(settings.extract_model, temperature=0, max_tokens=4096)
     return llm.with_structured_output(RequirementList, include_raw=True)
 
 
-def extract(jd_text: str, verbose: bool = False) -> list[Requirement]:
-    """JD text -> requirements. One retry, then raise."""
+def extract(jd_text: str, verbose: bool = False) -> tuple[list[Requirement], list[dict]]:
+    """JD text -> requirements. One retry, then raise. Second return value is one usage
+    record per API call made (including a call whose parse failed and got retried —
+    it was still billed)."""
     messages = [
         ("system", _prompt()),
         ("human", f"<job_description>\n{jd_text.strip()}\n</job_description>"),
@@ -66,9 +69,11 @@ def extract(jd_text: str, verbose: bool = False) -> list[Requirement]:
         print(f"--- jd ({len(jd_text)} chars) ---")
 
     last_error: Exception | None = None
+    usage: list[dict] = []
     for attempt in (1, 2):
         try:
             result = _model().invoke(messages)
+            usage.append(record_usage(result["raw"], settings.extract_model, "extract_requirements"))
             if verbose:
                 print(f"--- raw response (attempt {attempt}) ---")
                 print(result["raw"].content)
@@ -77,7 +82,7 @@ def extract(jd_text: str, verbose: bool = False) -> list[Requirement]:
             reqs = [Requirement(**r.model_dump()) for r in result["parsed"].requirements]
             if not reqs:
                 raise ValueError("model returned zero requirements")
-            return reqs
+            return reqs, usage
         except Exception as exc:  # noqa: BLE001 — retried once, then surfaced
             last_error = exc
             if verbose:
@@ -88,9 +93,10 @@ def extract(jd_text: str, verbose: bool = False) -> list[Requirement]:
 
 def extract_requirements(state: JobState) -> dict:
     """Graph node."""
-    reqs = extract(state.job.jd_text)
+    reqs, usage = extract(state.job.jd_text)
     counts = {t: sum(1 for r in reqs if r.type == t) for t in ("hard", "soft", "disqualifier")}
     return {
         "requirements": reqs,
         "notes": [f"extracted {len(reqs)} requirements {counts}"],
+        "llm_calls": usage,
     }

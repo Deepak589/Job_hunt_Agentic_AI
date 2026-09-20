@@ -34,6 +34,10 @@ class Evidence(BaseModel):
     source_id: str  # e.g. "exp.valuemomentum.b2" or "repo:RAG_pipeline"
     text: str
     similarity: float
+    # Cross-encoder rescoring of this candidate against its query (evidence.rerank).
+    # None until reranked. Additive: `similarity` (bi-encoder cosine) is never overwritten,
+    # since coverage.py's threshold gate reads that field directly (config.py sem_threshold).
+    rerank_score: float | None = None
     # Carried through from the profile: "not_shipped" work may legitimately evidence a
     # skill, but must never be phrased as delivered. Losing the flag here is how that
     # bullet reaches a CV as a shipped claim.
@@ -105,6 +109,24 @@ class Draft(BaseModel):
     highlighted_projects: list[str] = []  # profile project ids surfaced this application
 
 
+class RecruiterResult(BaseModel):
+    """Output of the `recruiter_sim` node — role 4 (CLAUDE.md). Fast, shallow,
+    keyword-literal on purpose: simulates the ATS/keyword screen, not a real read."""
+
+    result: Literal["pass", "soft_fail", "hard_fail"]
+    reason: str
+
+
+class HiringManagerVerdict(BaseModel):
+    """Output of the `hiring_manager` node — role 5 (CLAUDE.md). The "could you defend
+    this in an interview" check. Informational — the deterministic AtsScore (§6) stays
+    the authoritative apply/skip number; this is what the human sees at review time."""
+
+    verdict: AtsVerdict
+    why: str
+    indefensible_bullets: list[str] = []
+
+
 class Scores(BaseModel):
     hard_coverage: float = 0.0  # 0..1, deterministic
     soft_coverage: float = 0.0  # 0..1, deterministic
@@ -122,10 +144,19 @@ class JobState(BaseModel):
     notes: Annotated[list[str], operator.add] = []
     diagnosis: Diagnosis | None = None
     draft: Draft | None = None
+    recruiter: RecruiterResult | None = None
+    hiring_manager: HiringManagerVerdict | None = None
     attempt_count: int = 0  # rewrite calls so far — shared cap across the fact-check and review loops
     validation_errors: list[str] = []  # filled by validate_facts; cleared on a clean rewrite
     ats: AtsScore | None = None
     artifacts: dict[str, str] = {}  # rendered PDF paths — filled by render_documents (Task 8), read by score_ats (Task 9) and the CLI (Task 10)
+    # One entry per LLM call — {node, model, input_tokens, output_tokens, cost_usd}.
+    # See costs.record_usage. Reducer needed for the same reason `notes` has one.
+    llm_calls: Annotated[list[dict], operator.add] = []
+
+    @property
+    def total_cost_usd(self) -> float:
+        return round(sum(c["cost_usd"] for c in self.llm_calls), 6)
 
     def hard(self) -> list[Requirement]:
         return [r for r in self.requirements if r.type == "hard"]

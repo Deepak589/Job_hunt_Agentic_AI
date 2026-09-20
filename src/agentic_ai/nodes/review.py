@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import functools
+from typing import Literal
 
-from langchain_anthropic import ChatAnthropic
 from pydantic import BaseModel, Field
 
 from ..config import settings
+from ..costs import record_usage
+from ..llm import make_llm
 from ..state import JobState, Scores
 
 
@@ -27,7 +29,7 @@ def _prompt() -> str:
 def _model():
     # claude-sonnet-5 rejects an explicit `temperature` — the param is deprecated for
     # this model (confirmed live: "`temperature` is deprecated for this model").
-    llm = ChatAnthropic(model=settings.review_model, max_tokens=2048)
+    llm = make_llm(settings.review_model, max_tokens=2048)
     return llm.with_structured_output(ReviewResult, include_raw=True)
 
 
@@ -40,9 +42,11 @@ def review(state: JobState, verbose: bool = False) -> dict:
     messages = [("system", _prompt()), ("human", human)]
 
     last_error: Exception | None = None
+    usage: list[dict] = []
     for attempt in (1, 2):
         try:
             result = _model().invoke(messages)
+            usage.append(record_usage(result["raw"], settings.review_model, "review"))
             if verbose:
                 print(f"--- review raw response (attempt {attempt}) ---")
                 print(result["raw"].content)
@@ -62,6 +66,7 @@ def review(state: JobState, verbose: bool = False) -> dict:
                 "scores": scores,
                 "validation_errors": verdict.weaknesses if will_retry else [],
                 "notes": [note],
+                "llm_calls": usage,
             }
         except Exception as exc:  # noqa: BLE001 — retried once, then surfaced
             last_error = exc
@@ -69,7 +74,7 @@ def review(state: JobState, verbose: bool = False) -> dict:
     raise RuntimeError(f"review failed twice: {last_error}")
 
 
-def review_gate(state: JobState) -> str:
+def review_gate(state: JobState) -> Literal["retry", "proceed"]:
     """'retry' back to rewrite (attempts remain and score is low), else 'proceed'."""
     score = state.scores.review_score
     if score is not None and score < settings.min_review_score and state.attempt_count < settings.max_rewrite_attempts:

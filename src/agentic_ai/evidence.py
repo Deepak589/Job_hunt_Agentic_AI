@@ -31,9 +31,31 @@ def _embedder():
     return SentenceTransformer(settings.embedding_model)
 
 
+@functools.lru_cache(maxsize=1)
+def _reranker():
+    """Cross-encoder, loaded once, same lazy pattern as _embedder(). Reads (query,
+    candidate) jointly instead of comparing separately-embedded vectors, so it can catch
+    cases where the bi-encoder's cosine top-1 isn't really the best match (config.py
+    sem_threshold comment: the documented upgrade path)."""
+    from sentence_transformers import CrossEncoder
+
+    return CrossEncoder(settings.reranker_model)
+
+
 def embed(texts: list[str]) -> list[list[float]]:
     # normalized vectors, so cosine distance is the meaningful metric
     return _embedder().encode(texts, normalize_embeddings=True).tolist()
+
+
+def rerank(query: str, candidates: list[Evidence]) -> list[Evidence]:
+    """Rescore retrieved candidates against `query` with the cross-encoder, most relevant
+    first. Additive: sets `rerank_score` on a copy of each candidate, never touches
+    `similarity` (cosine) — coverage.py's threshold gate reads that field, unchanged."""
+    if not candidates:
+        return candidates
+    scores = _reranker().predict([(query, c.text) for c in candidates])
+    rescored = [c.model_copy(update={"rerank_score": round(float(s), 4)}) for c, s in zip(candidates, scores)]
+    return sorted(rescored, key=lambda e: -e.rerank_score)
 
 
 def _client() -> chromadb.ClientAPI:
@@ -103,7 +125,7 @@ def retrieve_many(
         n_results=k or settings.top_k,
         include=["documents", "distances", "metadatas"],
     )
-    return [
+    groups = [
         [
             Evidence(
                 source="cv_bullet",
@@ -119,6 +141,12 @@ def retrieve_many(
             res["ids"], res["documents"], res["distances"], res["metadatas"]
         )
     ]
+    # Reorder each group by cross-encoder score. Harmless downstream: coverage.py's
+    # retrieve_evidence merges evidence across subqueries and re-sorts by `similarity`
+    # (cosine) before applying the top_k cutoff, so the coverage gate's evidence selection
+    # is unaffected — this reordering is only visible to direct callers (retrieve(),
+    # calibrate()) that consume the returned order/top-1 as-is.
+    return [rerank(q, group) for q, group in zip(queries, groups)]
 
 
 def retrieve(query: str, k: int | None = None, collection: Collection | None = None) -> list[Evidence]:
@@ -168,29 +196,50 @@ def calibrate(collection: Collection | None = None) -> dict[str, object]:
     signal alone cannot separate these — which is why §6 pairs it with keyword matching.
     """
     collection = collection or get_collection()
-    hits = retrieve_many([q for q, _ in PROBES], k=1, collection=collection)
-    measured = [(q, expected, hit[0]) for (q, expected), hit in zip(PROBES, hits)]
-    sims = sorted({round(e.similarity, 4) for _, _, e in measured})
+    # k=top_k, not 1: gives the reranker a pool to reorder. `max(group, key=similarity)`
+    # below recovers the same cosine top-1 that k=1 used to return directly (chroma already
+    # returns nearest-first, so the argmax over a top-k pool == the top-1 of a top-1 query),
+    # so the cosine-only calibration below is unchanged by this.
+    hits = retrieve_many([q for q, _ in PROBES], k=settings.top_k, collection=collection)
+    measured = [
+        (q, expected, max(group, key=lambda e: e.similarity), group[0])
+        for (q, expected), group in zip(PROBES, hits)
+    ]  # (query, expected_covered, cosine_top, rerank_top)
+    sims = sorted({round(e.similarity, 4) for _, _, e, _ in measured})
 
     # candidate thresholds sit between adjacent observed similarities
     candidates = [round((a + b) / 2, 4) for a, b in zip(sims, sims[1:])]
     best, best_errors = candidates[0], len(measured)
     for t in candidates:
-        errors = sum(1 for _, expected, e in measured if (e.similarity >= t) != expected)
+        errors = sum(1 for _, expected, e, _ in measured if (e.similarity >= t) != expected)
         if errors < best_errors:
             best, best_errors = t, errors
+
+    # Reranked-accuracy comparison (upgrade-path evidence for config.py's sem_threshold
+    # comment): does swapping which candidate is "top" — cosine top-1 vs cross-encoder
+    # top-1 — change how many probes land correctly at the CURRENT production threshold?
+    # Same threshold both columns, on purpose: this measures whether reranking picks a
+    # better top-1, not whether rerank_score needs its own cutoff.
+    current = settings.sem_threshold
+    cosine_correct = sum(1 for _, expected, e, _ in measured if (e.similarity >= current) == expected)
+    rerank_correct = sum(1 for _, expected, _, r in measured if (r.similarity >= current) == expected)
+    rerank_changed_pick = sum(1 for _, _, e, r in measured if e.source_id != r.source_id)
 
     return {
         "suggested_threshold": best,
         "misclassified_probes": best_errors,
         "total_probes": len(measured),
+        "current_threshold": current,
+        "cosine_correct_at_current_threshold": cosine_correct,
+        "rerank_correct_at_current_threshold": rerank_correct,
+        "rerank_changed_top_pick": rerank_changed_pick,
         "covered_range": [
-            min(e.similarity for _, exp, e in measured if exp),
-            max(e.similarity for _, exp, e in measured if exp),
+            min(e.similarity for _, exp, e, _ in measured if exp),
+            max(e.similarity for _, exp, e, _ in measured if exp),
         ],
         "uncovered_range": [
-            min(e.similarity for _, exp, e in measured if not exp),
-            max(e.similarity for _, exp, e in measured if not exp),
+            min(e.similarity for _, exp, e, _ in measured if not exp),
+            max(e.similarity for _, exp, e, _ in measured if not exp),
         ],
         "probes": [
             {
@@ -199,7 +248,10 @@ def calibrate(collection: Collection | None = None) -> dict[str, object]:
                 "top_id": e.source_id,
                 "similarity": e.similarity,
                 "correct_at_suggested": (e.similarity >= best) == exp,
+                "rerank_top_id": r.source_id,
+                "rerank_score": r.rerank_score,
+                "rerank_correct_at_current": (r.similarity >= current) == exp,
             }
-            for q, exp, e in measured
+            for q, exp, e, r in measured
         ],
     }

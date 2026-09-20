@@ -58,7 +58,15 @@ def _model():
     return llm.with_structured_output(RoleClassification, include_raw=True)
 
 
+@functools.lru_cache(maxsize=128)
 def classify_role(jd_text: str) -> RoleType:
+    """Cached by jd_text — a review/fact-validation retry re-invokes rewrite for the
+    same JD, and the role classification cannot have changed between attempts.
+
+    Not wired into costs.py: the caller only wants `RoleType` back, and the cache above
+    already kills repeat calls. A 256-max_tokens Haiku call is cheap enough that the
+    small miss on `JobState.total_cost_usd` isn't worth a second return value here.
+    """
     messages = [
         ("system", _prompt()),
         ("human", f"<job_description>\n{jd_text.strip()}\n</job_description>"),

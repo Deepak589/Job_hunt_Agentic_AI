@@ -261,3 +261,115 @@ fixed and re-reviewed clean before merge:
   resume).
 - The human interrupt point (`§9`) — nothing to resume yet; Phase 2 runs straight
   through.
+
+## review_score / ATS disconnect — fixed 2026-09-16
+
+Item #6 from the 2026-09-15 review, and #4 in improvement.md. `review_score` now caps
+`ats_score()`'s total at 94 (held out of `apply`) whenever it's below
+`settings.min_review_score` (7) and no hard gate already failed. Cap, not a 6th
+component — the 100-point weights are unchanged; see plan.md §6 "Review-score cap".
+`scoring/ats.py`, `tests/test_ats_score.py` (4 new tests), `plan.md` §6. 108/108 tests pass.
+
+## Dead-state cleanup + retry-cache — fixed 2026-09-16
+
+Items #7, #8, #9 from the 2026-09-15 review (improvement.md #6, #1):
+- `highlighted_projects` was written by `rewrite` and read by nothing — wired into
+  the CLI's DRAFT report line instead of dropping it (Phase 3's recruiter_sim/
+  hiring_manager or the cover letter may still want it; printing it is zero-risk).
+- `review_gate` now returns `Literal["retry", "proceed"]`, matching `fact_gate`'s typing.
+- `classify_role` is now `@functools.lru_cache`d by `jd_text` — a review/fact-validation
+  retry no longer pays for a redundant Haiku call to re-derive a role that can't have
+  changed. `src/agentic_ai/cli.py`, `nodes/review.py`, `section_order.py`. 108/108 pass.
+
+## Token/cost logging — implemented 2026-09-16
+
+improvement.md #1 ("no token usage or $ cost logged anywhere"). Verified current
+Anthropic pricing live (claude-haiku-4-5: $1/$5 per 1M in/out, claude-sonnet-5: $2/$10)
+before hardcoding rates — see `src/agentic_ai/costs.py`.
+
+- `costs.py` — `record_usage(raw_message, model, node)` reads a LangChain AIMessage's
+  `.usage_metadata` and prices it against `PRICE_PER_MTOK`; raises on an unpriced model
+  rather than silently costing $0.
+- `state.py` — `JobState.llm_calls` (reducer list, same pattern as `notes`) +
+  `total_cost_usd` property.
+- Wired into the 4 graph nodes that call the LLM: `extract_requirements`, `diagnose`,
+  `rewrite`, `review` — each records usage for every API call made, including a
+  parse-failure attempt that gets retried (it was still billed).
+- `classify_role` (section_order.py) deliberately NOT instrumented — already
+  `lru_cache`d by jd_text, and a 256-max_tokens Haiku call is cheap enough that
+  threading a second return value through it wasn't worth it. Documented inline.
+- `cli.py` — prints `cost: $X.XXXX (N LLM call(s))` after a run; `--verbose` breaks it
+  down per node.
+- `tests/test_costs.py` (4 new tests). 112/112 pass.
+
+## Prompt caching — implemented 2026-09-16
+
+improvement.md #1 ("no Anthropic prompt caching"). `rewrite` and `diagnose` both send
+the full profile on every call — `rewrite` pays for it again on every fact-validator
+and review retry (up to 2x), and it's identical across every job in a run.
+
+- `nodes/rewrite.py` — human message split into content blocks with 2 `cache_control`
+  breakpoints: after the profile+never_claim block (reusable across every job) and
+  after section_order (reusable across every retry of the SAME job). System prompt
+  also cached.
+- `nodes/diagnose.py` — profile block cached (1 breakpoint); diagnose runs once per
+  job (no retry loop back to it), so this only pays off across jobs, not within one.
+- `costs.py` — `record_usage` now reads `input_token_details.cache_read` /
+  `cache_creation` and prices them at 0.1x / 1.25x the base input rate instead of the
+  flat rate (LangChain's `input_tokens` already folds both into the total). Without
+  this the cost number would silently hide the savings caching is supposed to produce.
+- `tests/test_costs.py` — 2 new tests for the cache pricing math. 113/113 pass.
+- NOT yet confirmed against a live API call (`cache_read_input_tokens > 0`) — unit
+  tests cover the plumbing/pricing, not an actual cache hit. Costs real money to
+  verify; deferred until asked.
+
+## Phase 3 — implemented 2026-09-16
+
+Full 5-role graph + human loop + persistence, per plan.md §16 Phase 3's 3 bullets
+(plan at ~/.claude/plans/frolicking-finding-sparkle.md).
+
+1. **`recruiter_sim`** (`nodes/recruiter_sim.py`, Haiku, role 4) — shallow keyword-
+   literal screen over the rendered CV text (not the profile) + hard requirements only.
+   `recruiter_gate`: `hard_fail` → `log_recruiter_fail` → END (skip before render, per
+   CLAUDE.md "Hard-fail = don't recommend applying without fixing the gap first");
+   `pass`/`soft_fail` → `hiring_manager`.
+2. **`hiring_manager`** (`nodes/hiring_manager.py`, Sonnet, role 5) — full profile +
+   draft, judges fit/tone/defensibility ("could you defend this under a follow-up
+   question"). Informational only — doesn't gate the graph; the deterministic
+   `AtsScore` stays the authoritative apply/skip number, this is what the human sees
+   at review time.
+3. **Checkpointer + interrupt (§9)** — `graph.py`: `build_graph()` takes an optional
+   `checkpointer`; when set, compiles with `interrupt_before=["render_documents"]`.
+   New `run_for_review()` / `resume_review()` / `get_paused_state()`, all using
+   `SqliteSaver.from_conn_string(settings.checkpoint_db_path)`, `thread_id=job.id`.
+   `run()` (plain `jobpilot add`, no `--review`) has no checkpointer — unchanged
+   behavior, just 2 more LLM calls now that recruiter_sim/hiring_manager are wired
+   into the default (non-`skip_render`) path.
+4. **`jobpilot add --review`** pauses before render, prints the job id.
+   **`jobpilot review <id>`** prints diagnosis/recruiter/hiring_manager/draft, prompts
+   y/n (edit deferred — noted in the plan as a distinct follow-up feature), resumes or
+   marks rejected.
+5. **SQLite persistence** (`db/schema.sql`, `db/repo.py`) — `jobs` (upserted) + `runs`
+   (cost ledger: tokens_in/out, cost_usd from `state.total_cost_usd`, coverage,
+   verdict, skip_reason). `requirements`/`applications` tables deliberately deferred
+   to Phase 5 (outcome tracking) per plan.md's own build order — not in Phase 3's
+   bullet list. `persist_run()` called from both `add` paths and `review`.
+
+Verified: `skip_render=True` path (Phase 1/2's `--no-render`) is byte-for-byte
+unchanged — no new nodes added to that branch, so all prior tests still cover it
+untouched. The interrupt/pause/resume mechanics were verified end-to-end against a
+REAL `SqliteSaver` + REAL Typst render (not mocked) in `test_graph_phase3.py`, with
+only the 6 LLM-calling nodes monkeypatched to stand-ins — zero API cost, but real
+proof the checkpointer/thread_id/resume plumbing works, not just an assumption from
+reading the LangGraph docs.
+
+124/124 tests pass (11 new: 4 pure `recruiter_gate` tests, 4 interrupt/resume
+mechanics tests, 3 `db/repo.py` tests).
+
+**Not done, explicitly deferred** (see the plan file's Scope section):
+- `jobpilot cost` reporting command, `MAX_DAILY_COST_USD` budget guard, structured
+  JSON logs (all §12, not in Phase 3's bullet list)
+- Langfuse tracing (explicitly Phase 4)
+- "edit" in the review flow (only y/n implemented)
+- Live end-to-end verification against the real Anthropic API (`add --review` →
+  `review <id>` → y) — costs money, not run yet, ask before running.

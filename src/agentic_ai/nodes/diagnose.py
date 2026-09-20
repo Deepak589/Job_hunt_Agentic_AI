@@ -7,9 +7,11 @@ from __future__ import annotations
 import functools
 import json
 
-from langchain_anthropic import ChatAnthropic
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..config import settings
+from ..costs import record_usage
+from ..llm import make_llm
 from ..profile import Profile
 from ..state import Diagnosis, JobState
 
@@ -23,7 +25,7 @@ def _prompt() -> str:
 def _model():
     # claude-sonnet-5 rejects an explicit `temperature` — the param is deprecated for
     # this model (confirmed live: "`temperature` is deprecated for this model").
-    llm = ChatAnthropic(model=settings.diagnose_model, max_tokens=4096)
+    llm = make_llm(settings.diagnose_model, max_tokens=4096)
     return llm.with_structured_output(Diagnosis, include_raw=True)
 
 
@@ -50,17 +52,36 @@ def _profile_brief(profile: Profile) -> str:
 
 def diagnose(state: JobState, verbose: bool = False) -> dict:
     profile = Profile.load()
-    human = (
-        f"<job_description>\n{state.job.jd_text.strip()}\n</job_description>\n\n"
-        f"<extracted_requirements>\n{_requirements_brief(state)}\n</extracted_requirements>\n\n"
-        f"<candidate_profile>\n{_profile_brief(profile)}\n</candidate_profile>"
-    )
-    messages = [("system", _prompt()), ("human", human)]
+    # Profile block first + cache_control: identical across every job in a run, unlike
+    # the job-specific blocks after it. diagnose runs once per job (no retry loop back
+    # to it), so this only pays off across jobs, not within one — still free money on
+    # a multi-job run. See rewrite.py for the same pattern with a within-job payoff too.
+    content = [
+        {
+            "type": "text",
+            "text": f"<candidate_profile>\n{_profile_brief(profile)}\n</candidate_profile>",
+            "cache_control": {"type": "ephemeral"},
+        },
+        {
+            "type": "text",
+            "text": f"<job_description>\n{state.job.jd_text.strip()}\n</job_description>",
+        },
+        {
+            "type": "text",
+            "text": f"<extracted_requirements>\n{_requirements_brief(state)}\n</extracted_requirements>",
+        },
+    ]
+    messages = [
+        SystemMessage(content=[{"type": "text", "text": _prompt(), "cache_control": {"type": "ephemeral"}}]),
+        HumanMessage(content=content),
+    ]
 
     last_error: Exception | None = None
+    usage: list[dict] = []
     for attempt in (1, 2):
         try:
             result = _model().invoke(messages)
+            usage.append(record_usage(result["raw"], settings.diagnose_model, "diagnose"))
             if verbose:
                 print(f"--- diagnose raw response (attempt {attempt}) ---")
                 print(result["raw"].content)
@@ -74,6 +95,7 @@ def diagnose(state: JobState, verbose: bool = False) -> dict:
                     f"{len(diagnosis.matches)} matches, "
                     f"positioning={'mismatch' if diagnosis.positioning_mismatch else 'ok'}"
                 ],
+                "llm_calls": usage,
             }
         except Exception as exc:  # noqa: BLE001 — retried once, then surfaced
             last_error = exc

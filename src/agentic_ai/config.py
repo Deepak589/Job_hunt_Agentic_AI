@@ -21,9 +21,16 @@ class Settings(BaseSettings):
     chroma_path: Path = ROOT / "data" / "chroma"
     prompts_dir: Path = ROOT / "prompts"
     collection_name: str = "evidence"
+    checkpoint_db_path: Path = ROOT / "data" / "checkpoints.db"  # LangGraph's own format
+    jobs_db_path: Path = ROOT / "data" / "jobpilot.db"  # our jobs/runs cost ledger, §11
+    log_path: Path = ROOT / "data" / "jobpilot.log.jsonl"  # structured JSONL run log
+
+    # --- budget ---
+    max_daily_cost_usd: float | None = None  # None = no cap; set via JOBPILOT_MAX_DAILY_COST_USD
 
     # --- retrieval ---
     embedding_model: str = "BAAI/bge-m3"
+    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     top_k: int = 5
 
     # CALIBRATED, not guessed. bge-m3 cosine similarities sit high even for unrelated
@@ -44,6 +51,15 @@ class Settings(BaseSettings):
     # the KEYWORD half of §6, not this one; treat semantic as the paraphrase catcher only.
     # Upgrade path when a real JD is misjudged: rerank the top-k with a cross-encoder
     # before thresholding, rather than pushing this number around.
+    #
+    # Implemented (evidence.rerank): the cross-encoder reorders top-k candidates and sets
+    # Evidence.rerank_score, but this threshold still compares against `similarity`
+    # (cosine), not rerank_score. Reasoning: this file's own note above says named
+    # technologies are carried by the KEYWORD half of §6, not semantic — a cross-encoder
+    # still doesn't know your CV lacks Kafka, it just reads pairs more carefully. `jobpilot
+    # index calibrate` shows rerank does not beat cosine on the probe set (see its output),
+    # so there's no evidence yet to threshold on it. Revisit if calibrate ever shows
+    # otherwise.
     sem_threshold: float = 0.5558
 
     # --- gate ---
@@ -56,6 +72,8 @@ class Settings(BaseSettings):
     diagnose_model: str = "claude-sonnet-5"
     rewrite_model: str = "claude-sonnet-5"
     review_model: str = "claude-sonnet-5"
+    recruiter_model: str = "claude-haiku-4-5-20251001"  # role 4: shallow, keyword-literal, fast
+    hiring_manager_model: str = "claude-sonnet-5"  # role 5: defensibility judgment
 
     # --- rewrite loop ---
     # CLAUDE.md Reviewer agent: "Max 2 loops — after that, ship best version and flag
@@ -63,6 +81,18 @@ class Settings(BaseSettings):
     # by the fact-validator retry and the review-score retry.
     max_rewrite_attempts: int = 2
     min_review_score: int = 7  # below this, retry rewrite (if attempts remain)
+
+    # --- tracing (optional) ---
+    # Unset by default -> tracing is a no-op. Set all three to enable Langfuse.
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+    langfuse_host: str | None = None
+
+    # --- transport (429/5xx backoff, shared by all 6 ChatAnthropic nodes) ---
+    llm_max_retries: int = 3
+
+    # --- concurrency (jobpilot add --dir) ---
+    max_concurrent_jobs: int = 3
 
 
 settings = Settings()

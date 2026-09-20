@@ -71,6 +71,41 @@ def test_clean_high_coverage_state_scores_high_and_reports_counts() -> None:
     assert result.gates == {"no_fabrication": True, "no_disqualifiers": True}
 
 
+def test_low_review_score_caps_total_below_apply() -> None:
+    profile = _profile()
+    s = _clean_state(review_score=4)
+    pdf = ParsedPdf(recovered=14, expected=14)
+    result = ats_score(s, pdf, profile)
+    assert result.total <= 94.0
+    assert result.verdict != "apply"
+    assert "CAPPED" in result.report
+
+
+def test_high_review_score_is_not_capped() -> None:
+    profile = _profile()
+    s = _clean_state(review_score=9)
+    pdf = ParsedPdf(recovered=14, expected=14)
+    result = ats_score(s, pdf, profile)
+    assert "CAPPED" not in result.report
+
+
+def test_missing_review_score_is_not_capped() -> None:
+    profile = _profile()
+    s = _clean_state(review_score=9).model_copy(update={"scores": Scores(hard_coverage=1.0, review_score=None)})
+    pdf = ParsedPdf(recovered=14, expected=14)
+    result = ats_score(s, pdf, profile)
+    assert "CAPPED" not in result.report
+
+
+def test_review_cap_does_not_override_a_failed_gate() -> None:
+    profile = _profile()
+    s = _clean_state(review_score=4).model_copy(update={"validation_errors": ["bad number"]})
+    pdf = ParsedPdf(recovered=10, expected=10)
+    result = ats_score(s, pdf, profile)
+    assert result.total == 0.0
+    assert result.verdict == "skip"
+
+
 def test_verdict_thresholds() -> None:
     from agentic_ai.scoring.ats import verdict_for
 

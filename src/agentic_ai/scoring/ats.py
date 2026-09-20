@@ -12,6 +12,7 @@ from pathlib import Path
 from pydantic import BaseModel
 from pypdf import PdfReader
 
+from ..config import settings
 from ..profile import Profile
 from ..state import AtsScore, AtsVerdict, JobState
 
@@ -86,6 +87,18 @@ def ats_score(state: JobState, pdf: ParsedPdf, profile: Profile) -> AtsScore:
         "positioning": 5.0 if state.draft and state.draft.section_order else 0.0,
     }
     total = 0.0 if failed else round(sum(components.values()), 1)
+
+    # A low review score means the judge (nodes/review.py) flagged real weaknesses in
+    # the final draft — reached here only because max_rewrite_attempts was exhausted
+    # (CLAUDE.md: "ship best version and flag remaining weakness", not loop forever).
+    # Counted points can't see that judgment, so cap the total below "apply" rather
+    # than let a weak-but-fact-clean draft read as a 97+. This is a cap, not a gate:
+    # nothing here is fabricated, so it stays fix_then_apply, never skip.
+    review_score = state.scores.review_score
+    review_capped = not failed and review_score is not None and review_score < settings.min_review_score
+    if review_capped:
+        total = min(total, 94.0)
+
     verdict: AtsVerdict = "skip" if failed else verdict_for(total)
 
     gate_lines = "\n".join(
@@ -93,10 +106,16 @@ def ats_score(state: JobState, pdf: ParsedPdf, profile: Profile) -> AtsScore:
         for name in ("no_fabrication", "no_disqualifiers")
     )
     point_lines = "\n".join(f"  {name} {'.' * (16 - len(name))} {pts:5.1f}" for name, pts in components.items())
+    cap_line = (
+        f"\nCAPPED: review score {review_score}/10 < {settings.min_review_score} — "
+        f"total held at {total:.1f}, cannot reach 'apply'\n"
+        if review_capped else ""
+    )
     report = (
         f"ATS SCORE: {total:.1f} / 100          verdict: {verdict}\n\n"
         f"GATES\n{gate_lines}\n\n"
         f"POINTS\n{point_lines}\n                                   ─────\n                                   {total:6.1f}\n"
+        f"{cap_line}"
     )
 
     return AtsScore(

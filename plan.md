@@ -465,6 +465,18 @@ Two properties keep it honest:
 so an uncovered hard requirement caps the score below 95 by construction, and `hard_gap_gate`
 skips the job before it ever reaches scoring.
 
+**Review-score cap.** Live runs (2026-09-15, tasks/todo.md) found a draft the `review`
+node's LLM judge scored 4-5/10 on all three axes still reaching 97-99 total, because none
+of the 5 counted components can see that judgment. A draft only reaches `score_ats` with a
+low `review_score` when `max_rewrite_attempts` (2) is exhausted — CLAUDE.md's reviewer role
+says to "ship best version and flag remaining weakness" rather than loop forever, so this is
+an expected path, not a bug in the loop. But an unexamined weak draft must not score as
+confidently as a clean one. Rule: if `review_score < min_review_score` (7), cap `total` at
+94 — held out of `apply`, never zeroed (nothing here is fabricated, so `skip` would be
+wrong). This is a **cap, not a 6th component** — it does not touch the 100-point weights
+above, so the counted arithmetic and the "counts first" property are unchanged; it only
+clips the ceiling when the judge that produced the draft flagged it as weak.
+
 Component 3 requires the parseability check from §10 — re-extract text from the rendered PDF
 and assert every field survives. That is the failure mode that silently loses interviews, and
 it is the only part of "passing ATS" that maps to real employer software.

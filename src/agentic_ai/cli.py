@@ -1,6 +1,10 @@
-"""jobpilot — Phase 1 CLI.
+"""jobpilot CLI.
 
-    jobpilot add --file jd.txt        run a JD through the gap report
+    jobpilot add --file jd.txt        run a JD through the full 5-role pipeline
+    jobpilot add --file jd.txt --review   pause before render for human approval (§9)
+    jobpilot add --dir jds/           run every .txt JD in a directory concurrently
+    jobpilot review <job_id>          approve/edit/reject a job paused by --review
+    jobpilot cost [--days N]          spend summary from the runs ledger
     jobpilot index build [--force]    (re)build the evidence store
     jobpilot index calibrate          measure SEM_THRESHOLD against the labeled probes
     jobpilot profile check            validate master_profile.yaml
@@ -8,22 +12,78 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+import os
+import subprocess
 import sys
+import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import typer
 from rich.console import Console
 from rich.table import Table
+from ruamel.yaml import YAML
 
 from .config import settings
 
 app = typer.Typer(add_completion=False, help="Job-hunt pipeline — Phase 1.")
 index_app = typer.Typer(help="Evidence store.")
 profile_app = typer.Typer(help="Master profile.")
+source_app = typer.Typer(help="Job-board ingestion.")
 app.add_typer(index_app, name="index")
 app.add_typer(profile_app, name="profile")
+app.add_typer(source_app, name="source")
 
 console = Console()
+
+
+def _log_event(event: dict) -> None:
+    """Append one JSON line to settings.log_path. Decoupled from Rich console output —
+    never affects what's printed to the terminal."""
+    settings.log_path.parent.mkdir(parents=True, exist_ok=True)
+    line = {"timestamp": datetime.now(timezone.utc).isoformat(), **event}
+    with settings.log_path.open("a") as f:
+        f.write(json.dumps(line) + "\n")
+
+
+def _log_run(state) -> None:
+    per_node: dict[str, float] = {}
+    for c in state.llm_calls:
+        per_node[c["node"]] = round(per_node.get(c["node"], 0.0) + c["cost_usd"], 6)
+    _log_event({
+        "event": "run",
+        "job_id": state.job.id,
+        "cost_by_node": per_node,
+        "total_cost_usd": state.total_cost_usd,
+        "verdict": state.hiring_manager.verdict if state.hiring_manager else (state.ats.verdict if state.ats else None),
+        "skip_reason": state.skip_reason,
+    })
+
+
+def _today_start() -> datetime:
+    return datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def _check_budget() -> None:
+    """Raise typer.Exit(1) before any graph run if today's spend already hit the cap."""
+    if settings.max_daily_cost_usd is None:
+        return
+    from .db.repo import cost_summary
+
+    spent = cost_summary(since=_today_start())["total_cost_usd"]
+    if spent >= settings.max_daily_cost_usd:
+        _log_event({
+            "event": "budget_guard_rejected",
+            "spent_today_usd": spent,
+            "max_daily_cost_usd": settings.max_daily_cost_usd,
+        })
+        console.print(
+            f"[bold red]budget cap hit[/bold red] — spent ${spent:.4f} today, "
+            f"cap is ${settings.max_daily_cost_usd:.4f}. Not running."
+        )
+        raise typer.Exit(1)
 
 
 # --------------------------------------------------------------------------- add
@@ -33,6 +93,9 @@ console = Console()
 def add(
     file: Path | None = typer.Option(None, "--file", "-f", help="Path to a saved JD."),
     stdin: bool = typer.Option(False, "--stdin", help="Read the JD from stdin."),
+    dir: Path | None = typer.Option(
+        None, "--dir", help="Directory of .txt JDs — run all of them concurrently (see Settings.max_concurrent_jobs)."
+    ),
     title: str = typer.Option("", "--title", help="Job title, if known."),
     company: str = typer.Option("", "--company", help="Company, if known."),
     location: str = typer.Option(
@@ -43,8 +106,41 @@ def add(
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Print prompts and raw responses."),
     no_render: bool = typer.Option(False, "--no-render", help="Stop after review; skip PDF render + ATS score."),
+    review: bool = typer.Option(
+        False, "--review", help="Pause before rendering for human approval — run 'jobpilot review <id>' to continue (§9)."
+    ),
 ) -> None:
     """Run one job description through the gap report."""
+    if dir is not None:
+        if file or stdin or review:
+            raise typer.BadParameter("--dir cannot be combined with --file/--stdin/--review")
+        jd_paths = sorted(dir.glob("*.txt"))
+        if not jd_paths:
+            raise typer.BadParameter(f"no .txt files found in {dir}")
+        jd_texts = [p.read_text() for p in jd_paths]
+
+        if verbose:
+            from . import nodes  # noqa: F401
+            console.print(f"[dim]model: {settings.extract_model}  threshold: {settings.sem_threshold}[/dim]")
+
+        _check_budget()
+
+        from .db.repo import persist_run
+        from .graph import run_many
+
+        job_fields = dict(
+            title=title, company=company, location=location,
+            employment_type="fulltime" if full_time else "werkstudent",
+        )
+        states = asyncio.run(run_many(jd_texts, _skip_render=no_render, **job_fields))
+        any_skipped = False
+        for state in states:
+            persist_run(state)
+            _log_run(state)
+            _report(state, verbose=verbose)
+            any_skipped = any_skipped or bool(state.skip_reason)
+        raise typer.Exit(1 if any_skipped else 0)
+
     if file:
         jd_text = file.read_text()
     elif stdin:
@@ -53,23 +149,136 @@ def add(
         raise typer.BadParameter("give --file or --stdin")
     if not jd_text.strip():
         raise typer.BadParameter("job description is empty")
-
-    from .graph import run
+    if review and no_render:
+        raise typer.BadParameter("--review and --no-render are mutually exclusive")
 
     if verbose:
         from . import nodes  # noqa: F401
         console.print(f"[dim]model: {settings.extract_model}  threshold: {settings.sem_threshold}[/dim]")
 
-    state = run(
-        jd_text,
-        title=title,
-        company=company,
-        location=location,
+    _check_budget()
+
+    from .db.repo import persist_run
+
+    job_fields = dict(
+        title=title, company=company, location=location,
         employment_type="fulltime" if full_time else "werkstudent",
-        _skip_render=no_render,
     )
+
+    if review:
+        from .graph import run_for_review
+
+        state = run_for_review(jd_text, **job_fields)
+        persist_run(state)
+        _log_run(state)
+        if state.skip_reason or state.draft is None:
+            _report(state, verbose=verbose)
+        else:
+            console.print(f"\n[bold]paused for review[/bold]  job id: [dim]{state.job.id}[/dim]")
+            console.print(f"run 'jobpilot review {state.job.id}' to see the draft and approve or reject it")
+        raise typer.Exit(1 if state.skip_reason else 0)
+
+    from .graph import run
+
+    state = run(jd_text, _skip_render=no_render, **job_fields)
+    persist_run(state)
+    _log_run(state)
     _report(state, verbose=verbose)
     raise typer.Exit(1 if state.skip_reason else 0)
+
+
+def _edit_draft(draft):
+    """Open `draft` as YAML in $EDITOR; re-parse into a Draft. Returns None if the user
+    gives up on a parse error (draft left unchanged)."""
+    from .state import Draft
+
+    yaml = YAML(typ="safe")
+    yaml.default_flow_style = False
+    fd, path_str = tempfile.mkstemp(suffix=".yaml")
+    os.close(fd)
+    path = Path(path_str)
+    try:
+        yaml.dump(draft.model_dump(mode="json"), path)
+        editor = os.environ.get("EDITOR", "vi")
+        while True:
+            subprocess.run([editor, str(path)])
+            try:
+                return Draft.model_validate(yaml.load(path))
+            except Exception as exc:
+                console.print(f"[red]invalid draft:[/red] {exc}")
+                if not typer.confirm("retry edit?"):
+                    return None
+    finally:
+        path.unlink(missing_ok=True)
+
+
+@app.command()
+def review(job_id: str, verbose: bool = typer.Option(False, "--verbose", "-v")) -> None:
+    """Approve, edit, or reject a job paused by 'jobpilot add --review' (§9)."""
+    from .db.repo import persist_run
+    from .graph import get_paused_state, resume_review, update_draft
+
+    try:
+        paused = get_paused_state(job_id)
+    except KeyError as exc:
+        raise typer.BadParameter(str(exc)) from None
+
+    if paused.skip_reason:
+        console.print(f"job {job_id} already ended: {paused.skip_reason}")
+        raise typer.Exit(1)
+
+    _report(paused, verbose=verbose)
+    approve = False
+    while True:
+        choice = typer.prompt("\napprove (a) / edit (e) / reject (r)?").strip().lower()
+        if choice in ("a", "approve"):
+            approve = True
+            break
+        if choice in ("r", "reject"):
+            approve = False
+            break
+        if choice in ("e", "edit"):
+            edited = _edit_draft(paused.draft)
+            if edited is not None:
+                update_draft(job_id, edited)
+                paused = get_paused_state(job_id)
+                _report(paused, verbose=verbose)
+            continue
+        console.print("[yellow]enter a, e, or r[/yellow]")
+
+    state = resume_review(job_id, approve=approve)
+    persist_run(state)
+    _log_run(state)
+    if approve:
+        console.print("\n[bold]RESULT[/bold]")
+        _report(state, verbose=verbose)
+    else:
+        console.print(f"\n[yellow]rejected[/yellow] — {state.skip_reason}")
+    raise typer.Exit(1 if state.skip_reason else 0)
+
+
+@app.command()
+def cost(days: int | None = typer.Option(None, "--days", help="Only include the last N days.")) -> None:
+    """Spend summary from the runs ledger — per day and all-time."""
+    from .db.repo import cost_summary
+
+    since = datetime.now(timezone.utc) - timedelta(days=days) if days is not None else None
+    summary = cost_summary(since=since)
+
+    table = Table(show_lines=False)
+    table.add_column("Date")
+    table.add_column("Runs", justify="right")
+    table.add_column("Tokens in", justify="right")
+    table.add_column("Tokens out", justify="right")
+    table.add_column("Cost", justify="right")
+    for row in summary["by_day"]:
+        table.add_row(row["date"], str(row["runs"]), str(row["tokens_in"]), str(row["tokens_out"]), f"${row['cost_usd']:.4f}")
+    console.print(table)
+    console.print(
+        f"\n[bold]total[/bold]  {summary['total_runs']} run(s)  "
+        f"{summary['total_tokens_in']} in / {summary['total_tokens_out']} out  "
+        f"${summary['total_cost_usd']:.4f}"
+    )
 
 
 def _report(state, verbose: bool = False) -> None:
@@ -147,6 +356,20 @@ def _report(state, verbose: bool = False) -> None:
         console.print(f"sections: {' -> '.join(state.draft.section_order)}")
         if state.scores.review_score is not None:
             console.print(f"review score: {state.scores.review_score}/10")
+        if state.draft.highlighted_projects:
+            console.print(f"highlighted projects: {', '.join(state.draft.highlighted_projects)}")
+
+    if state.recruiter:
+        mark = {"pass": "[green]pass[/green]", "soft_fail": "[yellow]soft_fail[/yellow]", "hard_fail": "[red]hard_fail[/red]"}[state.recruiter.result]
+        console.print(f"\n[bold]RECRUITER SCREEN[/bold]  {mark} — {state.recruiter.reason}")
+
+    if state.hiring_manager:
+        console.print(f"\n[bold]HIRING MANAGER[/bold]  verdict: {state.hiring_manager.verdict}")
+        console.print(state.hiring_manager.why)
+        if state.hiring_manager.indefensible_bullets:
+            console.print("[red]indefensible under a follow-up question:[/red]")
+            for b in state.hiring_manager.indefensible_bullets:
+                console.print(f"  - {b}")
 
     if state.ats:
         console.print(f"\n{state.ats.report}")
@@ -155,6 +378,21 @@ def _report(state, verbose: bool = False) -> None:
         console.print("[bold]artifacts:[/bold]")
         for k, v in state.artifacts.items():
             console.print(f"  {k}: {v}")
+
+    if state.llm_calls:
+        console.print(f"\n[dim]cost: ${state.total_cost_usd:.4f} ({len(state.llm_calls)} LLM call(s))[/dim]")
+        if verbose:
+            for c in state.llm_calls:
+                cache = ""
+                if c["cache_read_tokens"] or c["cache_creation_tokens"]:
+                    # literal square brackets are Rich markup — escape or they're
+                    # silently swallowed by console.print instead of shown (confirmed
+                    # live 2026-09-18: this text never rendered, no error either).
+                    cache = f" \\[cache: {c['cache_read_tokens']} read, {c['cache_creation_tokens']} written]"
+                console.print(
+                    f"  [dim]- {c['node']}: {c['input_tokens']}in/{c['output_tokens']}out "
+                    f"({c['model']}) -> ${c['cost_usd']:.4f}{cache}[/dim]"
+                )
 
     if verbose:
         console.print("\n[dim]trace:[/dim]")
@@ -202,6 +440,15 @@ def index_calibrate() -> None:
         f"({c['misclassified_probes']}/{c['total_probes']} probes misclassified) — "
         f"config currently uses [bold]{settings.sem_threshold}[/bold]"
     )
+    console.print(
+        f"\nreranked (cross-encoder) vs cosine, both at current threshold "
+        f"{c['current_threshold']}:"
+    )
+    console.print(
+        f"  cosine top-1 correct   {c['cosine_correct_at_current_threshold']}/{c['total_probes']}\n"
+        f"  rerank top-1 correct   {c['rerank_correct_at_current_threshold']}/{c['total_probes']}\n"
+        f"  rerank changed the top pick on {c['rerank_changed_top_pick']}/{c['total_probes']} probes"
+    )
 
 
 # ----------------------------------------------------------------------- profile
@@ -233,6 +480,80 @@ def profile_check() -> None:
             console.print(f"  - {e}")
         raise typer.Exit(1)
     console.print("\n[bold green]OK[/bold green] — profile integrity clean")
+
+
+# ---------------------------------------------------------------------- source
+
+
+def _print_jobs_table(jobs: list) -> None:
+    table = Table(show_lines=False)
+    table.add_column("Title", overflow="fold", max_width=40)
+    table.add_column("Company", overflow="fold", max_width=24)
+    table.add_column("Location", max_width=16)
+    table.add_column("URL", overflow="fold", max_width=40)
+    for j in jobs:
+        table.add_row(j.title, j.company, j.location, j.url)
+    console.print(table)
+    console.print(f"[bold]{len(jobs)}[/bold] job(s) found")
+
+
+def _run_and_report(jobs: list, full_time: bool, verbose: bool) -> None:
+    from .graph import run
+
+    for j in jobs:
+        state = run(
+            j.jd_text,
+            title=j.title,
+            company=j.company,
+            location=j.location,
+            source=j.source,
+            url=j.url,
+            posted_at=j.posted_at,
+            lang=j.lang,
+            employment_type="fulltime" if full_time else (j.employment_type or "werkstudent"),
+        )
+        _report(state, verbose=verbose)
+
+
+@source_app.command("arbeitnow")
+def source_arbeitnow(
+    query: str = typer.Option("", "--query", "-q", help="Keyword filter (title/JD text)."),
+    location: str = typer.Option("", "--location", "-l", help="Location filter."),
+    run_pipeline: bool = typer.Option(False, "--run", help="Run each fetched JD through the pipeline."),
+    full_time: bool = typer.Option(False, "--full-time", help="Full-time search when running the pipeline."),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Fetch postings from Arbeitnow (no auth required)."""
+    from .sourcing.arbeitnow import fetch_jobs
+
+    jobs = fetch_jobs(query=query, location=location)
+    if run_pipeline:
+        _run_and_report(jobs, full_time=full_time, verbose=verbose)
+    else:
+        _print_jobs_table(jobs)
+
+
+@source_app.command("adzuna")
+def source_adzuna(
+    query: str = typer.Option(..., "--query", "-q", help="Keyword search (Adzuna 'what')."),
+    location: str = typer.Option("", "--location", "-l", help="Location (Adzuna 'where')."),
+    country: str = typer.Option("de", "--country", help="Adzuna country code."),
+    run_pipeline: bool = typer.Option(False, "--run", help="Run each fetched JD through the pipeline."),
+    full_time: bool = typer.Option(False, "--full-time", help="Full-time search when running the pipeline."),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """Fetch postings from Adzuna. Requires ADZUNA_APP_ID and ADZUNA_APP_KEY env vars."""
+    from .sourcing.adzuna import MissingCredentialsError, fetch_jobs
+
+    try:
+        jobs = fetch_jobs(query=query, location=location, country=country)
+    except MissingCredentialsError as e:
+        raise typer.BadParameter(str(e)) from e
+
+    if run_pipeline:
+        _run_and_report(jobs, full_time=full_time, verbose=verbose)
+    else:
+        _print_jobs_table(jobs)
 
 
 if __name__ == "__main__":
