@@ -156,11 +156,24 @@ async def run_many(jd_texts: list[str], **shared_job_fields) -> list[JobState]:
     """Run multiple JDs through the graph concurrently (bounded by
     `Settings.max_concurrent_jobs`, since the Anthropic rate limit is shared across
     every concurrent call). Results come back in the same order as `jd_texts` —
-    `asyncio.gather` preserves input order regardless of completion order."""
+    `asyncio.gather` preserves input order regardless of completion order.
+
+    Two guards apply before a job is actually run, both INSIDE the semaphore so
+    they see up-to-date state from sibling jobs in this same batch (solution.md
+    step 1): re-running an already-processed job (same content-hash id) is skipped
+    rather than re-paying for extract/diagnose/rewrite, and the daily budget cap is
+    checked against persisted + in-flight-reserved spend, not persisted alone —
+    persisted-only would let every job in the batch pass the same stale check and
+    all run over cap, since nothing is persisted until run_many returns.
+    """
+    from .budget import BudgetGuard, estimated_job_cost
+    from .db.repo import already_processed
+
     skip_render = shared_job_fields.pop("_skip_render", False)
     graph = build_graph(skip_render=skip_render)
     semaphore = asyncio.Semaphore(settings.max_concurrent_jobs)
     config = {"callbacks": _tracing_callbacks()}
+    guard = BudgetGuard.for_today()
 
     async def _run_one(jd_text: str) -> JobState:
         job = Job(
@@ -172,8 +185,21 @@ async def run_many(jd_texts: list[str], **shared_job_fields) -> list[JobState]:
             **{k: v for k, v in shared_job_fields.items() if k not in ("source", "title", "company")},
         )
         async with semaphore:
-            result = await graph.ainvoke(JobState(job=job), config=config)
-        return JobState.model_validate(result)
+            if already_processed(job.id):
+                return JobState(job=job, skip_reason=f"already_processed (job_id={job.id})")
+
+            est_cost = estimated_job_cost()
+            if not await guard.try_reserve(est_cost):
+                return JobState(job=job, skip_reason="budget_cap_hit")
+
+            try:
+                result = await graph.ainvoke(JobState(job=job), config=config)
+                state = JobState.model_validate(result)
+            except Exception:
+                await guard.release(est_cost)
+                raise
+            await guard.settle(est_cost, state.total_cost_usd)
+        return state
 
     return list(await asyncio.gather(*(_run_one(jd) for jd in jd_texts)))
 

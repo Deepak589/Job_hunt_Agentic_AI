@@ -69,6 +69,20 @@ def persist_run(state: JobState, db_path: Path | None = None) -> str:
     return run_id
 
 
+def already_processed(job_id: str, db_path: Path | None = None) -> bool:
+    """True if a run for this job_id already reached a verdict — re-running the same
+    JD text (same content-hash id) shouldn't re-pay for extract/diagnose/rewrite/etc.
+    A crashed run leaves no row (or a row with verdict NULL) and is NOT considered
+    processed — durability (checkpointer resume) is solution.md step 2's job, not this."""
+    path = db_path or settings.jobs_db_path
+    init_db(path)
+    with sqlite3.connect(path) as conn:
+        row = conn.execute(
+            "SELECT 1 FROM runs WHERE job_id = ? AND verdict IS NOT NULL LIMIT 1", (job_id,)
+        ).fetchone()
+    return row is not None
+
+
 def cost_summary(db_path: Path | None = None, since: datetime | None = None) -> dict:
     """Per-day + all-time run count/tokens/$ from the `runs` table.
 

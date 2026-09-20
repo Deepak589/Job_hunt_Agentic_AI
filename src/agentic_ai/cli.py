@@ -62,28 +62,25 @@ def _log_run(state) -> None:
     })
 
 
-def _today_start() -> datetime:
-    return datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-
-
 def _check_budget() -> None:
-    """Raise typer.Exit(1) before any graph run if today's spend already hit the cap."""
-    if settings.max_daily_cost_usd is None:
-        return
-    from .db.repo import cost_summary
+    """Raise typer.Exit(1) before any graph run if today's spend already hit the cap.
 
-    spent = cost_summary(since=_today_start())["total_cost_usd"]
-    if spent >= settings.max_daily_cost_usd:
+    The actual cap check lives in budget.py (shared with graph.run_many's
+    BudgetGuard, solution.md step 1) — this wraps it in the CLI's console+log+exit
+    convention.
+    """
+    from .budget import BudgetExceeded, check_budget
+
+    try:
+        check_budget()
+    except BudgetExceeded as e:
         _log_event({
             "event": "budget_guard_rejected",
-            "spent_today_usd": spent,
+            "spent_today_usd": e.spent,
             "max_daily_cost_usd": settings.max_daily_cost_usd,
         })
-        console.print(
-            f"[bold red]budget cap hit[/bold red] — spent ${spent:.4f} today, "
-            f"cap is ${settings.max_daily_cost_usd:.4f}. Not running."
-        )
-        raise typer.Exit(1)
+        console.print(f"[bold red]budget cap hit[/bold red] — {e}. Not running.")
+        raise typer.Exit(1) from e
 
 
 # --------------------------------------------------------------------------- add
