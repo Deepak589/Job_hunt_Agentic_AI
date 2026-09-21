@@ -1,0 +1,15 @@
+# Starter list — verify each board_token/company slug is still live before relying on it.
+# Add more real companies here (`jobpilot source discover` can help once built; not built yet).
+#
+# schema: name (display), source (personio|greenhouse|lever|ashby — matches runner._CONNECTORS),
+#         identifier (the board_token/company slug the connector's API needs).
+companies:
+  - name: "Personio"
+    source: "personio"
+    identifier: "personio"       # personio.jobs.personio.de — Personio is famously on its own product
+  - name: "Zalando"
+    source: "lever"
+    identifier: "zalando"        # api.lever.co/v0/postings/zalando
+  - name: "N26"
+    source: "greenhouse"
+    identifier: "n26"            # boards-api.greenhouse.io/v1/boards/n26/jobs

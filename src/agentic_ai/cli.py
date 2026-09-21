@@ -86,6 +86,71 @@ def _check_budget() -> None:
 # --------------------------------------------------------------------------- add
 
 
+def _jobposting_from_jsonld(blocks: list[dict]) -> dict | None:
+    """Find a schema.org JobPosting among extruct's json-ld blocks, unwrapping @graph
+    where present. Returns None if none found."""
+
+    def _flatten(items: list) -> list[dict]:
+        out = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            if "@graph" in item:
+                out.extend(_flatten(item["@graph"]))
+            else:
+                out.append(item)
+        return out
+
+    for item in _flatten(blocks):
+        types = item.get("@type", "")
+        types = types if isinstance(types, list) else [types]
+        if any("JobPosting" in str(t) for t in types):
+            return item
+    return None
+
+
+def _fetch_job_posting(url: str) -> dict:
+    """Fetch `url` and pull JD fields — JSON-LD JobPosting first (structured, reliable),
+    trafilatura's readability extraction as a fallback (title/company left blank; the
+    user can pass --title/--company alongside --url same as with --file)."""
+    import extruct
+    import httpx
+    import trafilatura
+
+    from .sourcing.base import strip_html
+
+    resp = httpx.get(url, timeout=15, follow_redirects=True)
+    resp.raise_for_status()
+    html = resp.text
+
+    try:
+        data = extruct.extract(html, base_url=url, syntaxes=["json-ld"])
+        posting = _jobposting_from_jsonld(data.get("json-ld", []))
+    except Exception:
+        posting = None
+
+    if posting:
+        org = posting.get("hiringOrganization") or {}
+        loc = posting.get("jobLocation") or {}
+        if isinstance(loc, list):
+            loc = loc[0] if loc else {}
+        address = loc.get("address") if isinstance(loc, dict) else None
+        location = ""
+        if isinstance(address, dict):
+            location = address.get("addressLocality", "") or ""
+        elif isinstance(loc, dict):
+            location = loc.get("name", "") or ""
+        return {
+            "title": posting.get("title", "") or "",
+            "company": org.get("name", "") if isinstance(org, dict) else "",
+            "location": location,
+            "jd_text": strip_html(posting.get("description", "") or ""),
+        }
+
+    jd_text = trafilatura.extract(html) or ""
+    return {"title": "", "company": "", "location": "", "jd_text": jd_text}
+
+
 @app.command()
 def add(
     file: Path | None = typer.Option(None, "--file", "-f", help="Path to a saved JD."),
@@ -93,6 +158,7 @@ def add(
     dir: Path | None = typer.Option(
         None, "--dir", help="Directory of .txt JDs — run all of them concurrently (see Settings.max_concurrent_jobs)."
     ),
+    url: str = typer.Option("", "--url", help="Fetch the JD from a job posting URL (JSON-LD JobPosting, falling back to trafilatura)."),
     title: str = typer.Option("", "--title", help="Job title, if known."),
     company: str = typer.Option("", "--company", help="Company, if known."),
     location: str = typer.Option(
@@ -108,6 +174,9 @@ def add(
     ),
 ) -> None:
     """Run one job description through the gap report."""
+    if url and (file or stdin or dir):
+        raise typer.BadParameter("--url cannot be combined with --file/--stdin/--dir")
+
     if dir is not None:
         if file or stdin or review:
             raise typer.BadParameter("--dir cannot be combined with --file/--stdin/--review")
@@ -143,8 +212,14 @@ def add(
         jd_text = file.read_text()
     elif stdin:
         jd_text = sys.stdin.read()
+    elif url:
+        extracted = _fetch_job_posting(url)
+        jd_text = extracted["jd_text"]
+        title = title or extracted["title"]
+        company = company or extracted["company"]
+        location = location or extracted["location"]
     else:
-        raise typer.BadParameter("give --file or --stdin")
+        raise typer.BadParameter("give --file, --stdin, or --url")
     if not jd_text.strip():
         raise typer.BadParameter("job description is empty")
     if review and no_render:
@@ -579,6 +654,40 @@ def source_adzuna(
         _run_and_report(jobs, full_time=full_time, verbose=verbose)
     else:
         _print_jobs_table(jobs)
+
+
+# ------------------------------------------------------------------------------ run
+
+
+@app.command()
+def run(
+    companies: Path | None = typer.Option(
+        None, "--companies", help="Path to companies.yaml (default: config/companies.yaml)."
+    ),
+    digest: str = typer.Option("", "--digest", help="Output format: 'json' for machine-readable stdout."),
+) -> None:
+    """Poll every configured company (config/companies.yaml), run genuinely new
+    postings through the pipeline, print a digest. Meant for a scheduler (see ops/)."""
+    from . import runner as runner_mod
+
+    result = runner_mod.run(companies)
+
+    if digest == "json":
+        print(json.dumps(result))
+        return
+
+    console.print(
+        f"[bold]companies polled:[/bold] {result['companies_polled']}  "
+        f"[bold]new:[/bold] {result['new_postings']}  "
+        f"[bold]prefiltered out:[/bold] {result['prefiltered_out']}  "
+        f"[bold]run:[/bold] {result['run']}  [bold]skipped:[/bold] {result['skipped']}"
+    )
+    v = result["verdicts"]
+    console.print(f"verdicts — apply: {v['apply']}  fix_then_apply: {v['fix_then_apply']}  skip: {v['skip']}")
+    for reason in result["prefiltered_reasons"]:
+        console.print(f"[dim]prefiltered: {reason}[/dim]")
+    for line in result["notify"]:
+        console.print(f"[yellow]notify:[/yellow] {line}")
 
 
 if __name__ == "__main__":

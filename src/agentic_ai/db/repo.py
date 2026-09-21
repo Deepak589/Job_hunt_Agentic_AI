@@ -6,6 +6,7 @@ job (same content-hash id) doesn't duplicate it.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -101,6 +102,70 @@ def already_processed(job_id: str, content_hash: str, db_path: Path | None = Non
             (job_id, content_hash),
         ).fetchone()
     return row is not None
+
+
+def get_company_snapshot(company: str, ats: str, db_path: Path | None = None) -> dict | None:
+    """Last successful fetch's posting ids + failure streak for (company, ats). None if
+    this company/ats pair has never been polled."""
+    path = db_path or settings.jobs_db_path
+    init_db(path)
+    with sqlite3.connect(path) as conn:
+        row = conn.execute(
+            "SELECT posting_ids, fetched_at, consecutive_failures FROM company_snapshots "
+            "WHERE company = ? AND ats = ?",
+            (company, ats),
+        ).fetchone()
+    if row is None:
+        return None
+    posting_ids, fetched_at, consecutive_failures = row
+    return {
+        "posting_ids": json.loads(posting_ids) if posting_ids else [],
+        "fetched_at": fetched_at,
+        "consecutive_failures": consecutive_failures or 0,
+    }
+
+
+def record_snapshot_success(company: str, ats: str, posting_ids: list[str], db_path: Path | None = None) -> None:
+    """Overwrite the snapshot after a successful fetch and reset the failure streak."""
+    path = db_path or settings.jobs_db_path
+    init_db(path)
+    now = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            """
+            INSERT INTO company_snapshots (company, ats, posting_ids, fetched_at, consecutive_failures)
+            VALUES (?, ?, ?, ?, 0)
+            ON CONFLICT(company, ats) DO UPDATE SET
+                posting_ids = excluded.posting_ids,
+                fetched_at = excluded.fetched_at,
+                consecutive_failures = 0
+            """,
+            (company, ats, json.dumps(posting_ids), now),
+        )
+        conn.commit()
+
+
+def record_snapshot_failure(company: str, ats: str, db_path: Path | None = None) -> int:
+    """Bump the failure streak for a company whose fetch just raised; leaves the last
+    known-good posting_ids untouched. Returns the new streak count."""
+    path = db_path or settings.jobs_db_path
+    init_db(path)
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            """
+            INSERT INTO company_snapshots (company, ats, posting_ids, fetched_at, consecutive_failures)
+            VALUES (?, ?, '[]', NULL, 1)
+            ON CONFLICT(company, ats) DO UPDATE SET
+                consecutive_failures = consecutive_failures + 1
+            """,
+            (company, ats),
+        )
+        conn.commit()
+        streak = conn.execute(
+            "SELECT consecutive_failures FROM company_snapshots WHERE company = ? AND ats = ?",
+            (company, ats),
+        ).fetchone()[0]
+    return streak
 
 
 def cost_summary(db_path: Path | None = None, since: datetime | None = None) -> dict:

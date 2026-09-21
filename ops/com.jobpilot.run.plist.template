@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd template for `jobpilot run`, hourly. Not installed by anything automatically —
+  see ops/README.md. Fill in REPO_PATH (and PYTHON_BIN if not using the repo's venv
+  python) before loading:
+
+      launctl load ~/Library/LaunchAgents/com.jobpilot.run.plist
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jobpilot.run</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>PYTHON_BIN</string>
+        <string>-m</string>
+        <string>agentic_ai.cli</string>
+        <string>run</string>
+        <string>--digest</string>
+        <string>json</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>REPO_PATH</string>
+
+    <key>StartInterval</key>
+    <integer>3600</integer>
+
+    <key>StandardOutPath</key>
+    <string>REPO_PATH/data/jobpilot-digest.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>REPO_PATH/data/jobpilot-digest.err.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
