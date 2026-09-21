@@ -518,9 +518,14 @@ def _print_jobs_table(jobs: list) -> None:
 
 
 def _run_and_report(jobs: list, full_time: bool, verbose: bool) -> None:
+    from .db.repo import already_processed
     from .graph import run
 
     for j in jobs:
+        if already_processed(j.id, j.content_hash):
+            _log_event({"event": "skip_seen", "job_id": j.id})
+            console.print(f"[dim]skip (already processed): {j.title} @ {j.company}[/dim]")
+            continue
         state = run(
             j.jd_text,
             title=j.title,

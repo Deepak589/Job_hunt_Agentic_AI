@@ -17,11 +17,26 @@ from ..state import JobState
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
 
+_NEW_COLUMNS = [
+    ("jobs", "content_hash", "TEXT"),
+    ("jobs", "raw_json", "TEXT"),
+    ("runs", "content_hash", "TEXT"),
+]
+
+
 def init_db(db_path: Path | None = None) -> None:
     path = db_path or settings.jobs_db_path
     path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(path) as conn:
         conn.executescript(SCHEMA_PATH.read_text())
+        # CREATE TABLE IF NOT EXISTS is a no-op on a pre-existing db — an on-disk db from
+        # before solution.md step 1 needs these columns added explicitly.
+        for table, column, coltype in _NEW_COLUMNS:
+            try:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
+            except sqlite3.OperationalError:
+                pass  # column already exists
+        conn.commit()
 
 
 def persist_run(state: JobState, db_path: Path | None = None) -> str:
@@ -39,23 +54,24 @@ def persist_run(state: JobState, db_path: Path | None = None) -> str:
         conn.execute(
             """
             INSERT INTO jobs (id, source, url, title, company, location, jd_text,
-                               employment_type, first_seen, last_seen)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET last_seen = excluded.last_seen
+                               employment_type, content_hash, first_seen, last_seen)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET last_seen = excluded.last_seen,
+                                           content_hash = excluded.content_hash
             """,
             (job.id, job.source, job.url, job.title, job.company, job.location,
-             job.jd_text, job.employment_type, now, now),
+             job.jd_text, job.employment_type, job.content_hash, now, now),
         )
         conn.execute(
             """
-            INSERT INTO runs (run_id, job_id, started_at, finished_at,
+            INSERT INTO runs (run_id, job_id, content_hash, started_at, finished_at,
                                hard_coverage, soft_coverage, review_score, recruiter,
                                verdict, attempt_count, skip_reason,
                                tokens_in, tokens_out, cost_usd, ats_total)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                run_id, job.id, now, now,
+                run_id, job.id, job.content_hash, now, now,
                 state.scores.hard_coverage, state.scores.soft_coverage,
                 state.scores.review_score,
                 state.recruiter.result if state.recruiter else None,
@@ -69,16 +85,20 @@ def persist_run(state: JobState, db_path: Path | None = None) -> str:
     return run_id
 
 
-def already_processed(job_id: str, db_path: Path | None = None) -> bool:
-    """True if a run for this job_id already reached a verdict — re-running the same
-    JD text (same content-hash id) shouldn't re-pay for extract/diagnose/rewrite/etc.
+def already_processed(job_id: str, content_hash: str, db_path: Path | None = None) -> bool:
+    """True if a run for this exact (job_id, content_hash) pair already reached a verdict.
+
+    job_id alone would wrongly skip a posting whose JD text changed since the last run —
+    the id now identifies the POSTING (source+url), not the text (solution.md step 1), so
+    an edited listing under the same id needs to be recognized as new content and re-run.
     A crashed run leaves no row (or a row with verdict NULL) and is NOT considered
     processed — durability (checkpointer resume) is solution.md step 2's job, not this."""
     path = db_path or settings.jobs_db_path
     init_db(path)
     with sqlite3.connect(path) as conn:
         row = conn.execute(
-            "SELECT 1 FROM runs WHERE job_id = ? AND verdict IS NOT NULL LIMIT 1", (job_id,)
+            "SELECT 1 FROM runs WHERE job_id = ? AND content_hash = ? AND verdict IS NOT NULL LIMIT 1",
+            (job_id, content_hash),
         ).fetchone()
     return row is not None
 

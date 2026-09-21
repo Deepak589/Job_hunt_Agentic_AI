@@ -221,7 +221,7 @@ def test_resume_continues_without_repaying_completed_nodes(monkeypatch, tmp_path
     monkeypatch.setattr(graph_mod, "hiring_manager", _hiring_manager_crashes_once)
 
     jd_text = "crash test jd, quite unique"
-    job_id = graph_mod.job_id(jd_text)
+    job_id = graph_mod.job_id("manual", "", jd_text)
 
     try:
         graph_mod.run(jd_text, title="T", company="C")

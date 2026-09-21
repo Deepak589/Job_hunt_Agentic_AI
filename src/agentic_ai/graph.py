@@ -91,7 +91,13 @@ def _tracing_callbacks() -> list:
     return [CallbackHandler(public_key=settings.langfuse_public_key)]
 
 
-def job_id(jd_text: str) -> str:
+def job_id(source: str, url: str, jd_text: str) -> str:
+    """Identifies the POSTING, not the text (solution.md step 1): same source+url fetched
+    twice is the same job even if the board re-serves slightly different whitespace. Manual
+    pastes carry no url, so they fall back to the old content-hash id — content_hash
+    (state.Job) already covers text identity for those."""
+    if url:
+        return hashlib.sha256(f"{source}:{url}".encode()).hexdigest()[:16]
     return hashlib.sha256(jd_text.strip().encode()).hexdigest()[:16]
 
 
@@ -197,9 +203,10 @@ async def _open_checkpointer():
 
 
 def _build_job(jd_text: str, title: str, company: str, job_fields: dict) -> Job:
+    source = job_fields.pop("source", "manual")
     return Job(
-        id=job_id(jd_text),
-        source=job_fields.pop("source", "manual"),
+        id=job_id(source, job_fields.get("url", ""), jd_text),
+        source=source,
         title=title,
         company=company,
         jd_text=jd_text,
@@ -249,8 +256,11 @@ async def run_many(jd_texts: list[str], **shared_job_fields) -> list[JobState]:
     guard = BudgetGuard.for_today()
 
     async def _run_one(jd_text: str, graph) -> JobState:
+        # shared_job_fields is one url (if any) shared across the whole batch — real per-job
+        # urls never flow through this path (sourcing modules run one at a time via
+        # graph.run(), not run_many); job_id falls back to content-hash whenever url is "".
         job = Job(
-            id=job_id(jd_text),
+            id=job_id(shared_job_fields.get("source", "manual"), shared_job_fields.get("url", ""), jd_text),
             source=shared_job_fields.get("source", "manual"),
             title=shared_job_fields.get("title", ""),
             company=shared_job_fields.get("company", ""),
@@ -258,7 +268,7 @@ async def run_many(jd_texts: list[str], **shared_job_fields) -> list[JobState]:
             **{k: v for k, v in shared_job_fields.items() if k not in ("source", "title", "company")},
         )
         async with semaphore:
-            if already_processed(job.id):
+            if already_processed(job.id, job.content_hash):
                 return JobState(job=job, skip_reason=f"already_processed (job_id={job.id})")
 
             est_cost = estimated_job_cost()

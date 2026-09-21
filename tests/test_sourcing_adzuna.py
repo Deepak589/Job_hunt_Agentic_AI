@@ -47,12 +47,12 @@ def test_fetch_jobs_maps_fields_with_explicit_credentials() -> None:
     assert job.posted_at == "2026-09-01T12:00:00Z"
 
 
-def test_fetch_jobs_id_matches_content_hash() -> None:
+def test_fetch_jobs_id_matches_source_and_url() -> None:
     from agentic_ai.graph import job_id
 
     with patch("agentic_ai.sourcing.adzuna.httpx.get", return_value=_mock_response()):
         jobs = fetch_jobs(query="ML Engineer", app_id="id123", app_key="key123")
-    assert jobs[0].id == job_id(jobs[0].jd_text)
+    assert jobs[0].id == job_id("adzuna", jobs[0].url, jobs[0].jd_text)
 
 
 def test_fetch_jobs_missing_credentials_raises_clear_error(monkeypatch: pytest.MonkeyPatch) -> None:

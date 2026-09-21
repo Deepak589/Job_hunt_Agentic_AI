@@ -81,11 +81,12 @@ def fetch_jobs(query: str = "", location: str = "", **kwargs) -> list[Job]:
         if location and location.lower() not in loc.lower():
             continue
 
+        url = row.get("url", "")
         jobs.append(
             Job(
-                id=job_id(jd_text),
+                id=job_id("arbeitnow", url, jd_text),
                 source="arbeitnow",
-                url=row.get("url", ""),
+                url=url,
                 title=title,
                 company=company,
                 location=loc,

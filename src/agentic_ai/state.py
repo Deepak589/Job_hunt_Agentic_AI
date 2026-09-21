@@ -9,7 +9,9 @@ from __future__ import annotations
 import operator
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+import hashlib
+
+from pydantic import BaseModel, Field, model_validator
 
 ReqType = Literal["hard", "soft", "disqualifier"]
 EvidenceSource = Literal["cv_bullet", "project", "repo_doc", "education"]
@@ -63,7 +65,11 @@ class Requirement(BaseModel):
 
 
 class Job(BaseModel):
-    id: str  # content_hash
+    # solution.md step 1: id identifies the POSTING (source+url), so a re-fetch of the
+    # same unchanged listing dedupes; content_hash identifies the TEXT, so an edited JD
+    # under the same posting is recognized as new content instead of silently skipped.
+    id: str  # sha256(source:url)[:16], or sha256(jd_text)[:16] when there's no url (manual paste)
+    content_hash: str = ""  # sha256(jd_text)[:16] — auto-filled below if not given
     source: str  # adzuna | arbeitnow | manual
     url: str = ""
     title: str
@@ -73,6 +79,12 @@ class Job(BaseModel):
     jd_text: str
     lang: Literal["en", "de", "mixed"] = "en"
     employment_type: str | None = None  # werkstudent | fulltime | intern | unknown
+
+    @model_validator(mode="after")
+    def _fill_content_hash(self) -> "Job":
+        if not self.content_hash:
+            self.content_hash = hashlib.sha256(self.jd_text.strip().encode()).hexdigest()[:16]
+        return self
 
 
 class Diagnosis(BaseModel):

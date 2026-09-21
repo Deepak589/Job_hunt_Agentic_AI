@@ -77,10 +77,16 @@ def test_fetch_jobs_filters_by_query_and_location() -> None:
     assert jobs[0].location == "Munich"
 
 
-def test_fetch_jobs_id_matches_manual_content_hash() -> None:
-    """A job seen via sourcing and manual paste of the same JD text must dedupe."""
+def test_fetch_jobs_content_hash_matches_manual_content_hash() -> None:
+    """A job seen via sourcing and a manual paste of the same JD text must share a
+    content_hash (solution.md step 1: id is now source+url, content_hash carries text
+    identity instead)."""
     from agentic_ai.graph import job_id
+    from agentic_ai.state import Job
 
     with patch("agentic_ai.sourcing.arbeitnow.httpx.get", return_value=_mock_response()):
         jobs = fetch_jobs()
-    assert jobs[0].id == job_id(jobs[0].jd_text)
+    manual = Job(id=job_id("manual", "", jobs[0].jd_text), source="manual",
+                 title=jobs[0].title, jd_text=jobs[0].jd_text)
+    assert jobs[0].content_hash == manual.content_hash
+    assert jobs[0].id == job_id("arbeitnow", jobs[0].url, jobs[0].jd_text)

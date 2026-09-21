@@ -102,7 +102,7 @@ def test_run_many_skips_a_job_already_processed(monkeypatch, tmp_path) -> None:
 
     _isolate_db(monkeypatch, tmp_path)
     jd_text = "seen this one already"
-    job_id = graph_mod.job_id(jd_text)
+    job_id = graph_mod.job_id("manual", "", jd_text)
     from agentic_ai.state import AtsScore
 
     seen = JobState(

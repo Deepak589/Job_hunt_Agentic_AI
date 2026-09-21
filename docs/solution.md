@@ -3,14 +3,14 @@
 Same format as `tasks/todo.md`: step → files → verify. Do in order. Each step is one commit, tests green before next.
 Numbers in [ ] refer to review sections.
 
-## Step 1 — stop money leaks (review 2.1, 2.2)
-- [ ] `state.py` — `Job.id` = `sha256(source + ":" + (url or slug))[:16]`; add `Job.content_hash = sha256(jd_text)`. Manual `--file` keeps content hash as id (no url).
-- [ ] `db/schema.sql` — `jobs.content_hash TEXT`, `jobs.raw_json TEXT`; index on `(id)`.
-- [ ] `db/repo.py` — `already_processed(job_id, content_hash) -> bool` (a run row exists with same content_hash and verdict not null).
-- [ ] `cli.py source --run` + `graph.run_many` — skip when `already_processed`; log `{"event":"skip_seen"}`.
-- [ ] `graph.run_many._run_one` — call `_check_budget()` **inside** the semaphore, before `ainvoke`. Move `_check_budget` from `cli.py` to `budget.py` so graph can import it.
-- [ ] `budget.py` — reserve in-flight spend: `reserved += est_cost` on claim, release on finish; cap check = `persisted + reserved`.
-      → verify: `tests/test_budget.py` — 5 jobs, cap = 2×avg, exactly 2 run, 3 logged `budget_guard_rejected`. Re-running same arbeitnow page twice = 0 new runs.
+## Step 1 — stop money leaks (review 2.1, 2.2) — DONE
+- [x] `state.py` — `Job.id` = `sha256(source + ":" + (url or slug))[:16]`; add `Job.content_hash = sha256(jd_text)`. Manual `--file` keeps content hash as id (no url).
+- [x] `db/schema.sql` — `jobs.content_hash TEXT`, `jobs.raw_json TEXT`; index on `runs(job_id)` (the column `already_processed`/`cost_summary` actually filter on — `jobs.id` already had its PK index). `db/repo.init_db` ALTER-TABLEs these into a pre-existing on-disk db.
+- [x] `db/repo.py` — `already_processed(job_id, content_hash) -> bool` (a run row exists with same job_id **and** content_hash, verdict not null) — `runs.content_hash` is written at persist time so a later re-fetch of `jobs.content_hash` can't retroactively change what an old run matched.
+- [x] `cli.py source --run` (`_run_and_report`) + `graph.run_many` — skip when `already_processed`; log `{"event":"skip_seen"}`.
+- [x] `graph.run_many._run_one` — call `_check_budget()` **inside** the semaphore, before `ainvoke`. Move `_check_budget` from `cli.py` to `budget.py` so graph can import it. (Landed in dbec0d1.)
+- [x] `budget.py` — reserve in-flight spend: `reserved += est_cost` on claim, release on finish; cap check = `persisted + reserved`. (Landed in dbec0d1.)
+      → verified: `tests/test_run_many.py` (budget + dedupe), `tests/test_sourcing_{arbeitnow,adzuna}.py` (id now source+url; content_hash still matches a manual paste of the same text), `tests/test_db_repo.py`, `tests/test_graph_phase3.py` — 164/164 passing.
 
 ## Step 2 — durability (review 2.3) — DONE
 - [x] `graph.py` — `build_graph()` takes a checkpointer; `run()`/`run_many()`/`run_for_review()`/`resume_review()` each open ONE `AsyncSqliteSaver` per call (WAL mode via `_open_checkpointer()`), `thread_id = job.id`. (Async, not sync `SqliteSaver` — a sync saver blocks the event loop under `run_many`'s concurrent `ainvoke`s.)

@@ -73,11 +73,12 @@ def fetch_jobs(
         loc = (row.get("location") or {}).get("display_name", "")
         jd_text = row.get("description", "")
 
+        url = row.get("redirect_url", "")
         jobs.append(
             Job(
-                id=job_id(jd_text),
+                id=job_id("adzuna", url, jd_text),
                 source="adzuna",
-                url=row.get("redirect_url", ""),
+                url=url,
                 title=title,
                 company=company,
                 location=loc,

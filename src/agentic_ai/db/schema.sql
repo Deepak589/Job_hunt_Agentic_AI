@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   location TEXT,
   jd_text TEXT,
   employment_type TEXT,
+  content_hash TEXT,  -- sha256(jd_text)[:16]; distinguishes a re-fetch from an edited posting
+  raw_json TEXT,       -- unpopulated until step 6 sourcing connectors land; raw board payload
   first_seen TEXT,
   last_seen TEXT
 );
@@ -17,6 +19,7 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE TABLE IF NOT EXISTS runs (
   run_id TEXT PRIMARY KEY,
   job_id TEXT REFERENCES jobs(id),
+  content_hash TEXT,  -- content_hash AT RUN TIME — jobs.content_hash can move on a re-fetch
   started_at TEXT,
   finished_at TEXT,
   hard_coverage REAL,
@@ -31,3 +34,7 @@ CREATE TABLE IF NOT EXISTS runs (
   cost_usd REAL,
   ats_total REAL
 );
+
+-- already_processed()/cost_summary() both filter on job_id; jobs.id already has its PK
+-- index, but runs.job_id (a plain REFERENCES column) had none.
+CREATE INDEX IF NOT EXISTS idx_runs_job_id ON runs(job_id);
