@@ -11,8 +11,7 @@ from typing import Literal
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..config import settings
-from ..costs import record_usage
-from ..llm import make_llm
+from ..llm import invoke_structured, make_structured
 from ..state import JobState, RecruiterResult
 
 
@@ -23,8 +22,7 @@ def _prompt() -> str:
 
 @functools.lru_cache(maxsize=1)
 def _model():
-    llm = make_llm(settings.recruiter_model, max_tokens=1024)
-    return llm.with_structured_output(RecruiterResult, include_raw=True)
+    return make_structured(settings.recruiter_model, RecruiterResult, max_tokens=1024)
 
 
 def _rendered_cv_text(state: JobState) -> str:
@@ -48,27 +46,12 @@ def recruiter_sim(state: JobState, verbose: bool = False) -> dict:
         HumanMessage(content=human),
     ]
 
-    last_error: Exception | None = None
-    usage: list[dict] = []
-    for attempt in (1, 2):
-        try:
-            result = _model().invoke(messages)
-            usage.append(record_usage(result["raw"], settings.recruiter_model, "recruiter_sim"))
-            if verbose:
-                print(f"--- recruiter_sim raw response (attempt {attempt}) ---")
-                print(result["raw"].content)
-            if result["parsing_error"]:
-                raise ValueError(result["parsing_error"])
-            verdict = result["parsed"]
-            return {
-                "recruiter": verdict,
-                "notes": [f"recruiter_sim: {verdict.result} — {verdict.reason}"],
-                "llm_calls": usage,
-            }
-        except Exception as exc:  # noqa: BLE001 — retried once, then surfaced
-            last_error = exc
-
-    raise RuntimeError(f"recruiter_sim failed twice: {last_error}")
+    verdict, usage = invoke_structured(_model(), messages, model=settings.recruiter_model, node="recruiter_sim", verbose=verbose)
+    return {
+        "recruiter": verdict,
+        "notes": [f"recruiter_sim: {verdict.result} — {verdict.reason}"],
+        "llm_calls": usage,
+    }
 
 
 def recruiter_gate(state: JobState) -> Literal["hard_fail", "proceed"]:

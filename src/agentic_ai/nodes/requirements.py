@@ -15,8 +15,7 @@ import functools
 from pydantic import BaseModel, Field
 
 from ..config import settings
-from ..costs import record_usage
-from ..llm import make_llm
+from ..llm import invoke_structured, make_structured
 from ..state import JobState, ReqType, Requirement
 
 
@@ -51,14 +50,13 @@ def _prompt() -> str:
 
 @functools.lru_cache(maxsize=1)
 def _model():
-    llm = make_llm(settings.extract_model, temperature=0, max_tokens=4096)
-    return llm.with_structured_output(RequirementList, include_raw=True)
+    return make_structured(settings.extract_model, RequirementList, temperature=0, max_tokens=4096)
 
 
 def extract(jd_text: str, verbose: bool = False) -> tuple[list[Requirement], list[dict]]:
-    """JD text -> requirements. One retry, then raise. Second return value is one usage
-    record per API call made (including a call whose parse failed and got retried —
-    it was still billed)."""
+    """JD text -> requirements. Second return value is one usage record per API call
+    made (including a call that got retried for a cut-off/refused response — it was
+    still billed)."""
     messages = [
         ("system", _prompt()),
         ("human", f"<job_description>\n{jd_text.strip()}\n</job_description>"),
@@ -68,27 +66,13 @@ def extract(jd_text: str, verbose: bool = False) -> tuple[list[Requirement], lis
         print(_prompt())
         print(f"--- jd ({len(jd_text)} chars) ---")
 
-    last_error: Exception | None = None
-    usage: list[dict] = []
-    for attempt in (1, 2):
-        try:
-            result = _model().invoke(messages)
-            usage.append(record_usage(result["raw"], settings.extract_model, "extract_requirements"))
-            if verbose:
-                print(f"--- raw response (attempt {attempt}) ---")
-                print(result["raw"].content)
-            if result["parsing_error"]:
-                raise ValueError(result["parsing_error"])
-            reqs = [Requirement(**r.model_dump()) for r in result["parsed"].requirements]
-            if not reqs:
-                raise ValueError("model returned zero requirements")
-            return reqs, usage
-        except Exception as exc:  # noqa: BLE001 — retried once, then surfaced
-            last_error = exc
-            if verbose:
-                print(f"attempt {attempt} failed: {exc}")
-
-    raise RuntimeError(f"extract_requirements failed twice: {last_error}")
+    parsed, usage = invoke_structured(
+        _model(), messages, model=settings.extract_model, node="extract_requirements", verbose=verbose
+    )
+    reqs = [Requirement(**r.model_dump()) for r in parsed.requirements]
+    if not reqs:
+        raise RuntimeError("extract_requirements failed: model returned zero requirements")
+    return reqs, usage
 
 
 def extract_requirements(state: JobState) -> dict:

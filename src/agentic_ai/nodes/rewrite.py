@@ -10,8 +10,7 @@ import json
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..config import settings
-from ..costs import record_usage
-from ..llm import make_llm
+from ..llm import invoke_structured, make_structured
 from ..profile import Profile
 from ..section_order import classify_role, section_order_for
 from ..state import Draft, JobState
@@ -26,8 +25,7 @@ def _prompt() -> str:
 def _model():
     # claude-sonnet-5 rejects an explicit `temperature` — the param is deprecated for
     # this model (confirmed live: "`temperature` is deprecated for this model").
-    llm = make_llm(settings.rewrite_model, max_tokens=8192)
-    return llm.with_structured_output(Draft, include_raw=True)
+    return make_structured(settings.rewrite_model, Draft, max_tokens=8192)
 
 
 def _profile_bullets_json(profile: Profile) -> str:
@@ -44,7 +42,7 @@ def _profile_bullets_json(profile: Profile) -> str:
 def rewrite(state: JobState, verbose: bool = False) -> dict:
     assert state.diagnosis is not None, "rewrite requires diagnose to have run first"
     profile = Profile.load()
-    role = classify_role(state.job.jd_text)
+    role, role_usage = classify_role(state.job.jd_text)
     order = section_order_for(role)
 
     # Ordered for prompt-caching, not readability: the profile block is identical
@@ -53,6 +51,9 @@ def rewrite(state: JobState, verbose: bool = False) -> dict:
     # and review retry loops) — only validation_errors changes attempt to attempt.
     # Two `cache_control` breakpoints mark the two reusable prefixes; see costs.py for
     # why the resulting cache-read/write tokens are priced differently from a plain call.
+    # 1h ttl on the cross-job-reusable prefix (same reasoning as diagnose.py); the
+    # per-job-reusable one stays 5m — it's only ever reused within retries of one job,
+    # seconds apart, not across a whole batch run.
     content = [
         {
             "type": "text",
@@ -61,7 +62,7 @@ def rewrite(state: JobState, verbose: bool = False) -> dict:
         {
             "type": "text",
             "text": f"<never_claim>\n{profile.never_claim}\n</never_claim>",
-            "cache_control": {"type": "ephemeral"},  # end of the cross-job-reusable prefix
+            "cache_control": {"type": "ephemeral", "ttl": "1h"},  # end of the cross-job-reusable prefix
         },
         {
             "type": "text",
@@ -87,25 +88,11 @@ def rewrite(state: JobState, verbose: bool = False) -> dict:
         HumanMessage(content=content),
     ]
 
-    last_error: Exception | None = None
-    usage: list[dict] = []
-    for attempt in (1, 2):
-        try:
-            result = _model().invoke(messages)
-            usage.append(record_usage(result["raw"], settings.rewrite_model, "rewrite"))
-            if verbose:
-                print(f"--- rewrite raw response (attempt {attempt}) ---")
-                print(result["raw"].content)
-            if result["parsing_error"]:
-                raise ValueError(result["parsing_error"])
-            draft = result["parsed"].model_copy(update={"section_order": order})
-            return {
-                "draft": draft,
-                "attempt_count": state.attempt_count + 1,
-                "notes": [f"rewrite attempt {state.attempt_count + 1}: {sum(len(v) for v in draft.bullets.values())} bullets"],
-                "llm_calls": usage,
-            }
-        except Exception as exc:  # noqa: BLE001 — retried once, then surfaced
-            last_error = exc
-
-    raise RuntimeError(f"rewrite failed twice: {last_error}")
+    parsed, usage = invoke_structured(_model(), messages, model=settings.rewrite_model, node="rewrite", verbose=verbose)
+    draft = parsed.model_copy(update={"section_order": order})
+    return {
+        "draft": draft,
+        "attempt_count": state.attempt_count + 1,
+        "notes": [f"rewrite attempt {state.attempt_count + 1}: {sum(len(v) for v in draft.bullets.values())} bullets"],
+        "llm_calls": role_usage + usage,
+    }

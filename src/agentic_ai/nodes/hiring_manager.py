@@ -10,8 +10,7 @@ import json
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..config import settings
-from ..costs import record_usage
-from ..llm import make_llm
+from ..llm import invoke_structured, make_structured
 from ..profile import Profile
 from ..state import HiringManagerVerdict, JobState
 
@@ -23,8 +22,7 @@ def _prompt() -> str:
 
 @functools.lru_cache(maxsize=1)
 def _model():
-    llm = make_llm(settings.hiring_manager_model, max_tokens=2048)
-    return llm.with_structured_output(HiringManagerVerdict, include_raw=True)
+    return make_structured(settings.hiring_manager_model, HiringManagerVerdict, max_tokens=2048)
 
 
 def _profile_bullets_json(profile: Profile) -> str:
@@ -62,24 +60,9 @@ def hiring_manager(state: JobState, verbose: bool = False) -> dict:
         HumanMessage(content=content),
     ]
 
-    last_error: Exception | None = None
-    usage: list[dict] = []
-    for attempt in (1, 2):
-        try:
-            result = _model().invoke(messages)
-            usage.append(record_usage(result["raw"], settings.hiring_manager_model, "hiring_manager"))
-            if verbose:
-                print(f"--- hiring_manager raw response (attempt {attempt}) ---")
-                print(result["raw"].content)
-            if result["parsing_error"]:
-                raise ValueError(result["parsing_error"])
-            verdict = result["parsed"]
-            return {
-                "hiring_manager": verdict,
-                "notes": [f"hiring_manager: {verdict.verdict} — {verdict.why}"],
-                "llm_calls": usage,
-            }
-        except Exception as exc:  # noqa: BLE001 — retried once, then surfaced
-            last_error = exc
-
-    raise RuntimeError(f"hiring_manager failed twice: {last_error}")
+    verdict, usage = invoke_structured(_model(), messages, model=settings.hiring_manager_model, node="hiring_manager", verbose=verbose)
+    return {
+        "hiring_manager": verdict,
+        "notes": [f"hiring_manager: {verdict.verdict} — {verdict.why}"],
+        "llm_calls": usage,
+    }

@@ -10,8 +10,7 @@ import json
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..config import settings
-from ..costs import record_usage
-from ..llm import make_llm
+from ..llm import invoke_structured, make_structured
 from ..profile import Profile
 from ..state import Diagnosis, JobState
 
@@ -25,8 +24,7 @@ def _prompt() -> str:
 def _model():
     # claude-sonnet-5 rejects an explicit `temperature` — the param is deprecated for
     # this model (confirmed live: "`temperature` is deprecated for this model").
-    llm = make_llm(settings.diagnose_model, max_tokens=4096)
-    return llm.with_structured_output(Diagnosis, include_raw=True)
+    return make_structured(settings.diagnose_model, Diagnosis, max_tokens=4096)
 
 
 def _requirements_brief(state: JobState) -> str:
@@ -56,11 +54,15 @@ def diagnose(state: JobState, verbose: bool = False) -> dict:
     # the job-specific blocks after it. diagnose runs once per job (no retry loop back
     # to it), so this only pays off across jobs, not within one — still free money on
     # a multi-job run. See rewrite.py for the same pattern with a within-job payoff too.
+    # 1h ttl (not the 5m default): a nightly/hourly batch run easily spans more than 5
+    # minutes between jobs, and this block is byte-identical for every job in the run
+    # regardless of how long the batch takes — a 5m cache would silently miss on any
+    # gap longer than five minutes between jobs. costs.py prices a 1h write at 2x.
     content = [
         {
             "type": "text",
             "text": f"<candidate_profile>\n{_profile_brief(profile)}\n</candidate_profile>",
-            "cache_control": {"type": "ephemeral"},
+            "cache_control": {"type": "ephemeral", "ttl": "1h"},
         },
         {
             "type": "text",
@@ -76,28 +78,13 @@ def diagnose(state: JobState, verbose: bool = False) -> dict:
         HumanMessage(content=content),
     ]
 
-    last_error: Exception | None = None
-    usage: list[dict] = []
-    for attempt in (1, 2):
-        try:
-            result = _model().invoke(messages)
-            usage.append(record_usage(result["raw"], settings.diagnose_model, "diagnose"))
-            if verbose:
-                print(f"--- diagnose raw response (attempt {attempt}) ---")
-                print(result["raw"].content)
-            if result["parsing_error"]:
-                raise ValueError(result["parsing_error"])
-            diagnosis = result["parsed"]
-            return {
-                "diagnosis": diagnosis,
-                "notes": [
-                    f"diagnose: {len(diagnosis.hard_gaps)} hard gaps, "
-                    f"{len(diagnosis.matches)} matches, "
-                    f"positioning={'mismatch' if diagnosis.positioning_mismatch else 'ok'}"
-                ],
-                "llm_calls": usage,
-            }
-        except Exception as exc:  # noqa: BLE001 — retried once, then surfaced
-            last_error = exc
-
-    raise RuntimeError(f"diagnose failed twice: {last_error}")
+    diagnosis, usage = invoke_structured(_model(), messages, model=settings.diagnose_model, node="diagnose", verbose=verbose)
+    return {
+        "diagnosis": diagnosis,
+        "notes": [
+            f"diagnose: {len(diagnosis.hard_gaps)} hard gaps, "
+            f"{len(diagnosis.matches)} matches, "
+            f"positioning={'mismatch' if diagnosis.positioning_mismatch else 'ok'}"
+        ],
+        "llm_calls": usage,
+    }

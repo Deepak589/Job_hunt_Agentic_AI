@@ -71,6 +71,44 @@ def test_record_usage_reads_ephemeral_ttl_cache_creation_field() -> None:
     assert record["cost_usd"] == pytest.approx(2.50)
 
 
+def test_record_usage_prices_1h_ephemeral_cache_write_at_2x() -> None:
+    """solution.md step 5: diagnose.py/rewrite.py's cross-job profile block now uses a
+    1h ttl breakpoint, priced higher than the 1.25x 5m write."""
+    msg = AIMessage(
+        content="x",
+        usage_metadata={
+            "input_tokens": 1_000_000,
+            "output_tokens": 0,
+            "total_tokens": 1_000_000,
+            "input_token_details": {
+                "cache_read": 0,
+                "cache_creation": 0,
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 1_000_000,
+            },
+        },
+    )
+    record = record_usage(msg, "claude-sonnet-5", "diagnose")
+    assert record["cache_creation_tokens"] == 1_000_000
+    assert record["cost_usd"] == pytest.approx(4.00)  # 1M @ $2/1M * 2.0
+
+
+def test_record_usage_warns_on_expected_but_missing_cache() -> None:
+    import structlog
+
+    with structlog.testing.capture_logs() as captured:
+        record_usage(_msg(1_000, 0), "claude-sonnet-5", "rewrite", cache_control_expected=True)
+    assert any(e.get("event") == "cache_miss_unexpected" for e in captured)
+
+
+def test_record_usage_no_warning_when_cache_control_not_expected() -> None:
+    import structlog
+
+    with structlog.testing.capture_logs() as captured:
+        record_usage(_msg(1_000, 0), "claude-sonnet-5", "review", cache_control_expected=False)
+    assert not any(e.get("event") == "cache_miss_unexpected" for e in captured)
+
+
 def test_record_usage_unknown_model_raises() -> None:
     with pytest.raises(KeyError):
         record_usage(_msg(100, 100), "gpt-4o", "extract_requirements")

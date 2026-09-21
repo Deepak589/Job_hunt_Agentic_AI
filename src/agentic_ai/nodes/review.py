@@ -8,8 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from ..config import settings
-from ..costs import record_usage
-from ..llm import make_llm
+from ..llm import invoke_structured, make_structured
 from ..state import JobState, Scores
 
 
@@ -29,8 +28,7 @@ def _prompt() -> str:
 def _model():
     # claude-sonnet-5 rejects an explicit `temperature` — the param is deprecated for
     # this model (confirmed live: "`temperature` is deprecated for this model").
-    llm = make_llm(settings.review_model, max_tokens=2048)
-    return llm.with_structured_output(ReviewResult, include_raw=True)
+    return make_structured(settings.review_model, ReviewResult, max_tokens=2048)
 
 
 def review(state: JobState, verbose: bool = False) -> dict:
@@ -41,37 +39,22 @@ def review(state: JobState, verbose: bool = False) -> dict:
     )
     messages = [("system", _prompt()), ("human", human)]
 
-    last_error: Exception | None = None
-    usage: list[dict] = []
-    for attempt in (1, 2):
-        try:
-            result = _model().invoke(messages)
-            usage.append(record_usage(result["raw"], settings.review_model, "review"))
-            if verbose:
-                print(f"--- review raw response (attempt {attempt}) ---")
-                print(result["raw"].content)
-            if result["parsing_error"]:
-                raise ValueError(result["parsing_error"])
-            verdict = result["parsed"]
-            scores = state.scores.model_copy(update={"review_score": verdict.score})
-            note = f"review: {verdict.score}/10"
-            if verdict.weaknesses:
-                note += " — " + "; ".join(verdict.weaknesses)
-            # Only feed weaknesses back into validation_errors when review_gate will
-            # actually retry — otherwise a proceed-path draft with minor noted
-            # weaknesses would wrongly trip score_ats's no_fabrication gate, which
-            # reads validation_errors as "did fact-checking fail".
-            will_retry = verdict.score < settings.min_review_score and state.attempt_count < settings.max_rewrite_attempts
-            return {
-                "scores": scores,
-                "validation_errors": verdict.weaknesses if will_retry else [],
-                "notes": [note],
-                "llm_calls": usage,
-            }
-        except Exception as exc:  # noqa: BLE001 — retried once, then surfaced
-            last_error = exc
-
-    raise RuntimeError(f"review failed twice: {last_error}")
+    verdict, usage = invoke_structured(_model(), messages, model=settings.review_model, node="review", verbose=verbose)
+    scores = state.scores.model_copy(update={"review_score": verdict.score})
+    note = f"review: {verdict.score}/10"
+    if verdict.weaknesses:
+        note += " — " + "; ".join(verdict.weaknesses)
+    # Only feed weaknesses back into validation_errors when review_gate will
+    # actually retry — otherwise a proceed-path draft with minor noted
+    # weaknesses would wrongly trip score_ats's no_fabrication gate, which
+    # reads validation_errors as "did fact-checking fail".
+    will_retry = verdict.score < settings.min_review_score and state.attempt_count < settings.max_rewrite_attempts
+    return {
+        "scores": scores,
+        "validation_errors": verdict.weaknesses if will_retry else [],
+        "notes": [note],
+        "llm_calls": usage,
+    }
 
 
 def review_gate(state: JobState) -> Literal["retry", "proceed"]:

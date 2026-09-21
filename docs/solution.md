@@ -37,13 +37,14 @@ Numbers in [ ] refer to review sections.
 - [ ] `evals/run_harness.py --update-baseline` after, with the diff reviewed.
       → verify: `tests/test_ats_score.py` — draft A (keywords in PDF) vs draft B (same coverage, keywords absent) must differ by ≥10 pts. Today they score identical.
 
-## Step 5 — LLM plumbing (review 3.2, 3.3)
-- [ ] `llm.py` — `make_structured(model, schema)` → `with_structured_output(schema, method="json_schema", include_raw=True)`. Confirm via raw request log that `output_config.format` is sent; if not, call `anthropic.Anthropic().messages.parse()` directly.
-- [ ] Nodes — retry loop only when `stop_reason in ("max_tokens", "refusal")`; drop parse-retry.
-- [ ] `rewrite.py`, `diagnose.py` — profile-block breakpoint `{"type":"ephemeral","ttl":"1h"}`; keep 5m on per-job blocks.
-- [ ] `costs.py` — price 1h writes at 2.0×; warn (structlog) when a node with `cache_control` reports `cache_read == 0 and cache_creation == 0` (prefix below min tokens → silent no-cache).
-- [ ] `section_order.classify_role` — record usage (it's a paid call).
-      → verify: two runs 20 min apart → second `diagnose` shows `cache_read > 0`. Parse-retry counter in `llm_calls` = 0 over `evals/golden/`.
+## Step 5 — LLM plumbing (review 3.2, 3.3) — DONE
+- [x] `llm.py` — `make_structured(model, schema)` → `with_structured_output(schema, method="json_schema", include_raw=True)`. Confirmed against langchain_anthropic 1.5.x source: `method="json_schema"` binds `output_config={"format": ...}` on the request (`ChatAnthropic.with_structured_output`, `elif method == "json_schema":` branch) — no need to drop to `anthropic.Anthropic().messages.parse()`.
+- [x] Nodes — retry loop only when `stop_reason in ("max_tokens", "refusal")`; drop parse-retry. Centralized in `llm.invoke_structured` (was duplicated ad-hoc in all 7 call sites); every node (`diagnose`, `rewrite`, `review`, `recruiter_sim`, `hiring_manager`, `extract_requirements`, `classify_role`) now goes through it.
+- [x] `rewrite.py`, `diagnose.py` — profile-block breakpoint `{"type":"ephemeral","ttl":"1h"}`; kept 5m on per-job blocks (rewrite's `<section_order>` breakpoint).
+- [x] `costs.py` — price 1h writes at 2.0× (`CACHE_WRITE_MULTIPLIER_1H`, 5m stays 1.25×); warn (structlog `cache_miss_unexpected`) when a call with `cache_control` reports `cache_read == 0 and cache_creation == 0`. `llm.invoke_structured` detects `cache_control_expected` by inspecting the actual message blocks, so the warning only fires for calls that really set it.
+- [x] `section_order.classify_role` — now returns `(role, usage)`; a cache hit (jd_text already classified) returns `usage=[]` since no call was made, so a retried/cached classification never double- or under-counts cost. `rewrite()` folds this into its own `llm_calls`.
+      → verified: `tests/test_llm.py` (retry only on max_tokens/refusal, no retry on other parse failures, cache-miss warning fires only when `cache_control` was actually set), `tests/test_costs.py` (1h write priced at 2.0×, warning gated on `cache_control_expected`). 172/172 tests passing.
+      → not verified live (needs a real 20-min-apart run against the Anthropic API, outside this session's scope): `cache_read > 0` on a second run.
 
 ## Step 6 — ingestion + scheduler (review 2.6, 4.1)
 - [ ] `sourcing/base.py` — `JobSource` Protocol: `fetch(since) -> list[dict]`, `normalize(raw) -> Job`.
