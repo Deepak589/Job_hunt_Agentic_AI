@@ -139,6 +139,7 @@ class JobState(BaseModel):
     requirements: list[Requirement] = []
     scores: Scores = Field(default_factory=Scores)
     skip_reason: str | None = None  # set by hard_gap_gate → log_skip
+    human_decision: Literal["approve", "edit", "reject"] | None = None  # set by human_review node
     # LangGraph needs an explicit reducer for any field multiple nodes append to,
     # otherwise concurrent writes silently overwrite (plan.md §2).
     notes: Annotated[list[str], operator.add] = []

@@ -12,21 +12,22 @@ Numbers in [ ] refer to review sections.
 - [ ] `budget.py` — reserve in-flight spend: `reserved += est_cost` on claim, release on finish; cap check = `persisted + reserved`.
       → verify: `tests/test_budget.py` — 5 jobs, cap = 2×avg, exactly 2 run, 3 logged `budget_guard_rejected`. Re-running same arbeitnow page twice = 0 new runs.
 
-## Step 2 — durability (review 2.3)
-- [ ] `graph.py` — `build_graph()` always takes a checkpointer; `run()`/`run_many()` open ONE `SqliteSaver` per process (module-level, `PRAGMA journal_mode=WAL`), `thread_id = job.id`.
-- [ ] `graph.py` — compile with `durability="sync"`.
-- [ ] Replace `interrupt_before=["render_documents"]` with a `human_review` node: `decision = interrupt({"draft": state.draft, "recruiter": ..., "hiring_manager": ...})`; returns `{"draft": decision["draft"]}` on edit.
-- [ ] `resume_review` → `graph.invoke(Command(resume={"action": "approve"|"edit"|"reject", "draft": ...}), config)`.
-- [ ] After an edit, route `human_review → recruiter_sim` again (fixes stale verdict noted in README).
-- [ ] `render.py` — idempotent: if `cv.pdf` exists and `draft` hash in `out/<id>/draft.sha` matches, skip compile.
-      → verify: kill -9 during `hiring_manager` → `jobpilot resume <id>` continues without re-paying extract/diagnose/rewrite (assert `llm_calls` count unchanged). Edit at review → recruiter re-run appears in notes.
+## Step 2 — durability (review 2.3) — DONE
+- [x] `graph.py` — `build_graph()` takes a checkpointer; `run()`/`run_many()`/`run_for_review()`/`resume_review()` each open ONE `AsyncSqliteSaver` per call (WAL mode via `_open_checkpointer()`), `thread_id = job.id`. (Async, not sync `SqliteSaver` — a sync saver blocks the event loop under `run_many`'s concurrent `ainvoke`s.)
+- [x] `graph.py` — invoke with `durability="sync"` (this langgraph version takes `durability` on `ainvoke`, not `compile`).
+- [x] Replaced `interrupt_before=["render_documents"]` with a `human_review` node: `decision = interrupt({"draft": ..., "recruiter": ..., "hiring_manager": ...})`; returns `{"draft": Draft.model_validate(decision["draft"])}` on edit, `{"skip_reason": ...}` on reject. Only wired in when `build_graph(review_pause=True)` — automated batch runs never pause.
+- [x] `resume_review(job_id, action, draft=None)` → `graph.ainvoke(Command(resume={"action": ..., "draft": ...}), config, durability="sync")`. `action="reject"` still never re-invokes the graph (reads the snapshot, sets `skip_reason` locally) — cheapest path, matches old behavior.
+- [x] After an edit, `human_review` routes back to `recruiter_sim` (fixes stale verdict noted in README) — pauses again with a fresh verdict instead of rendering the old one.
+- [x] `render.py` — idempotent: `out/<id>/draft.sha` holds the last-rendered draft's hash; `render_documents` skips both Typst compiles when `cv.pdf`/`cover_letter.pdf`/`draft.sha` all exist and the hash matches.
+- [x] `resume(job_id)` (new, closes the crash-recovery loop the verify line needs) — probes with the `review_pause=True` (superset) topology to tell a crashed plain run apart from one genuinely paused for review, then replays only uncompleted nodes via `graph.ainvoke(None, config)`.
+      → verified: `tests/test_graph_phase3.py::test_resume_continues_without_repaying_completed_nodes` — `hiring_manager` raises once (simulated crash), `resume()` re-runs only `hiring_manager` (2 calls); `extract_requirements`/`diagnose`/`rewrite` stay at 1 call each. `test_resume_review_edit_reruns_recruiter_and_hiring_manager` — edit → `recruiter_sim` call count goes 1→2, new pause carries the edited draft. `tests/test_render.py::test_render_documents_skips_compile_when_draft_unchanged`.
 
-## Step 3 — hot-path waste (review 2.4, 2.5)
-- [ ] `evidence.retrieve_many(..., rerank: bool = False)`; only `calibrate()` passes `True`.
-- [ ] `profile.Profile.load` — `lru_cache` keyed on `(path, mtime_ns)`.
-- [ ] `render.py` — temp JSON via `tempfile.NamedTemporaryFile`, not `data/`.
-- [ ] `cli.py --dir` — exit 0 unless a job *errored*; skips are normal.
-      → verify: `time jobpilot add --file evals/real/02_... --no-render` before/after; expect >1s drop (cross-encoder gone). `Profile.load` called once per run (mock + call count).
+## Step 3 — hot-path waste (review 2.4, 2.5) — DONE
+- [x] `evidence.retrieve_many(..., rerank: bool = False)`; only `calibrate()` passes `True`.
+- [x] `profile.Profile.load` — `lru_cache` keyed on `(path, mtime_ns)`.
+- [x] `render.py` — temp JSON via `tempfile.NamedTemporaryFile`, not `data/`.
+- [x] `cli.py --dir` — exit 0 unless a job *errored*; skips are normal.
+      → verified: ce358f0.
 
 ## Step 4 — ATS score means something (review 3.4)
 - [ ] `scoring/ats.py` — `parse_pdf` returns extracted text; new component:

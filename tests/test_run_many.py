@@ -50,9 +50,11 @@ def _patch_llm_nodes(monkeypatch) -> None:
 
 def _isolate_db(monkeypatch, tmp_path) -> None:
     """run_many now checks already_processed()/BudgetGuard against settings.jobs_db_path
-    (solution.md step 1) — point that at a throwaway db so tests never touch the real
-    project ledger."""
+    (solution.md step 1), and opens an AsyncSqliteSaver against settings.checkpoint_db_path
+    (solution.md step 2) — point both at throwaway files so tests never touch real project
+    state."""
     monkeypatch.setattr(graph_mod.settings, "jobs_db_path", tmp_path / "jobpilot.db")
+    monkeypatch.setattr(graph_mod.settings, "checkpoint_db_path", tmp_path / "checkpoints.db")
 
 
 def test_run_many_returns_one_result_per_jd(monkeypatch, tmp_path) -> None:

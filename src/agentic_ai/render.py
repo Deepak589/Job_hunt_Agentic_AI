@@ -9,6 +9,7 @@ replaces on a per-job basis). Rendering itself calls the `typst` PyPI package's
 
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 from datetime import datetime
@@ -107,17 +108,33 @@ def build_cover_letter_render_data(draft: Draft, profile: Profile, job: Job) -> 
     }
 
 
+def _draft_hash(draft: Draft) -> str:
+    return hashlib.sha256(draft.model_dump_json().encode()).hexdigest()
+
+
 def render_documents(state: JobState) -> dict:
     assert state.draft is not None, "render_documents requires a clean draft"
     profile = Profile.load()
     job_dir = OUT_DIR / state.job.id
     job_dir.mkdir(parents=True, exist_ok=True)
 
+    cv_pdf = job_dir / "cv.pdf"
+    letter_pdf = job_dir / "cover_letter.pdf"
+    sha_path = job_dir / "draft.sha"
+    draft_hash = _draft_hash(state.draft)
+    if (
+        cv_pdf.exists() and letter_pdf.exists() and sha_path.exists()
+        and sha_path.read_text().strip() == draft_hash
+    ):
+        return {
+            "artifacts": {"cv_pdf": str(cv_pdf), "cover_pdf": str(letter_pdf)},
+            "notes": [f"render skipped (draft unchanged) for {job_dir}"],
+        }
+
     cv_data = build_cv_render_data(state.draft, profile)
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(cv_data, f, indent=2)
         cv_json_path = Path(f.name)
-    cv_pdf = job_dir / "cv.pdf"
     try:
         # root="/" — Typst treats any leading-"/" path (including our absolute OS paths
         # passed via sys_inputs) as root-relative, so root must be the real filesystem
@@ -137,7 +154,6 @@ def render_documents(state: JobState) -> dict:
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(letter_data, f, indent=2)
         letter_json_path = Path(f.name)
-    letter_pdf = job_dir / "cover_letter.pdf"
     try:
         typst_compile(
             str(settings.prompts_dir.parent / "templates" / "cover_letter.typ"),
@@ -148,6 +164,7 @@ def render_documents(state: JobState) -> dict:
     finally:
         letter_json_path.unlink()
 
+    sha_path.write_text(draft_hash)
     return {
         "artifacts": {"cv_pdf": str(cv_pdf), "cover_pdf": str(letter_pdf)},
         "notes": [f"rendered {cv_pdf.name} and {letter_pdf.name} to {job_dir}"],

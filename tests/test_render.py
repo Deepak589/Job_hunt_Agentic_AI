@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import agentic_ai.render as render_mod
 from agentic_ai.profile import Profile
 from agentic_ai.render import build_cover_letter_render_data, build_cv_render_data
-from agentic_ai.state import Draft, DraftBullet, Job
+from agentic_ai.state import Draft, DraftBullet, Job, JobState
 
 
 def _draft() -> Draft:
@@ -62,3 +63,31 @@ def test_cover_letter_render_data_has_company_and_body() -> None:
     assert data["title"] == "AI Engineer"
     assert "excited to apply" in data["body"]
     assert data["name"] == profile.raw["identity"]["name"]
+
+
+def test_render_documents_skips_compile_when_draft_unchanged(monkeypatch, tmp_path) -> None:
+    """solution.md step 2: idempotent render — a second call with the same draft must
+    not re-invoke Typst, only re-run it when the draft actually changed."""
+    monkeypatch.setattr(render_mod, "OUT_DIR", tmp_path)
+    calls: list[str] = []
+
+    def _fake_compile(source, output, sys_inputs, root):
+        calls.append(source)
+        __import__("pathlib").Path(output).write_bytes(b"%PDF-fake")
+
+    monkeypatch.setattr(render_mod, "typst_compile", _fake_compile)
+
+    job = Job(id="job1", source="manual", title="T", jd_text="...")
+    state = JobState(job=job, draft=_draft())
+
+    first = render_mod.render_documents(state)
+    assert len(calls) == 2  # cv + cover letter
+    assert first["artifacts"]["cv_pdf"]
+
+    second = render_mod.render_documents(state)
+    assert len(calls) == 2  # unchanged — no new compile calls
+    assert second["artifacts"] == first["artifacts"]
+
+    edited = state.model_copy(update={"draft": _draft().model_copy(update={"profile_line": "Changed."})})
+    third = render_mod.render_documents(edited)
+    assert len(calls) == 4  # draft changed — compiles again

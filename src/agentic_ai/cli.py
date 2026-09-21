@@ -212,9 +212,11 @@ def _edit_draft(draft):
 
 @app.command()
 def review(job_id: str, verbose: bool = typer.Option(False, "--verbose", "-v")) -> None:
-    """Approve, edit, or reject a job paused by 'jobpilot add --review' (§9)."""
+    """Approve, edit, or reject a job paused by 'jobpilot add --review' (§9). An edit
+    re-runs recruiter_sim/hiring_manager against the new draft and pauses again with a
+    fresh verdict — approve/reject never re-run those, so their verdict cannot go stale."""
     from .db.repo import persist_run
-    from .graph import get_paused_state, resume_review, update_draft
+    from .graph import get_paused_state, resume_review
 
     try:
         paused = get_paused_state(job_id)
@@ -226,32 +228,52 @@ def review(job_id: str, verbose: bool = typer.Option(False, "--verbose", "-v")) 
         raise typer.Exit(1)
 
     _report(paused, verbose=verbose)
-    approve = False
     while True:
         choice = typer.prompt("\napprove (a) / edit (e) / reject (r)?").strip().lower()
         if choice in ("a", "approve"):
-            approve = True
+            state = resume_review(job_id, action="approve")
             break
         if choice in ("r", "reject"):
-            approve = False
+            state = resume_review(job_id, action="reject")
             break
         if choice in ("e", "edit"):
             edited = _edit_draft(paused.draft)
-            if edited is not None:
-                update_draft(job_id, edited)
-                paused = get_paused_state(job_id)
-                _report(paused, verbose=verbose)
+            if edited is None:
+                continue
+            paused = resume_review(job_id, action="edit", draft=edited)
+            if paused.skip_reason:  # e.g. recruiter hard-failed the edited draft
+                state = paused
+                break
+            _report(paused, verbose=verbose)
             continue
         console.print("[yellow]enter a, e, or r[/yellow]")
 
-    state = resume_review(job_id, approve=approve)
     persist_run(state)
     _log_run(state)
-    if approve:
+    if state.artifacts.get("cv_pdf"):
         console.print("\n[bold]RESULT[/bold]")
         _report(state, verbose=verbose)
     else:
-        console.print(f"\n[yellow]rejected[/yellow] — {state.skip_reason}")
+        console.print(f"\n[yellow]{state.skip_reason}[/yellow]")
+    raise typer.Exit(1 if state.skip_reason else 0)
+
+
+@app.command()
+def resume(job_id: str) -> None:
+    """Continue a job whose process crashed mid-run (§2 durability) — picks up from the
+    last checkpointed node instead of re-paying for extract/diagnose/rewrite. Only for
+    the plain 'add' path; a job paused at review continues via 'jobpilot review'."""
+    from .db.repo import persist_run
+    from .graph import resume as resume_job
+
+    try:
+        state = resume_job(job_id)
+    except (KeyError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from None
+
+    persist_run(state)
+    _log_run(state)
+    _report(state, verbose=False)
     raise typer.Exit(1 if state.skip_reason else 0)
 
 

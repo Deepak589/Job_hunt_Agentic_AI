@@ -26,25 +26,41 @@
                                                  v                  v
                                     log_recruiter_fail -> END   hiring_manager
                                                                     |
-                                                     [interrupt_before, when a checkpointer is set]
+                                                       [only when review_pause=True]
                                                                     v
-                                              render_documents -> score_ats -> END
+                                                              human_review
+                                                            /      |      \\
+                                                      reject     edit    approve
+                                                         v         |        v
+                                                        END   recruiter_sim  render_documents -> score_ats -> END
+                                                              (loop above, fresh verdict)
 
 recruiter_sim/hiring_manager (roles 4-5, CLAUDE.md) only run on the full path —
-`skip_render=True` stops at `review` exactly as in Phase 1/2, unchanged. The
-SqliteSaver checkpointer + `interrupt_before=["render_documents"]` (§9) is opt-in via
-`run_for_review`/`resume_review` below; `run()` (plain `jobpilot add`) has no
-checkpointer and runs straight through as before, just with 2 more LLM calls.
+`skip_render=True` stops at `review` exactly as in Phase 1/2, unchanged.
+
+Durability (solution.md step 2): `run()`/`run_many()`/`run_for_review()`/`resume_review()`
+each open ONE `AsyncSqliteSaver` per call (WAL mode — a sync `SqliteSaver` would block
+the event loop under `run_many`'s concurrent `ainvoke`s), `thread_id = job.id`, and
+invoke with `durability="sync"` so a crashed process can pick a job back up via
+`resume()` without re-paying for already-checkpointed nodes.
+
+The old `interrupt_before=["render_documents"]` (compile-time, static) is replaced by a
+`human_review` node that calls `interrupt()` (dynamic) — only wired in when
+`build_graph(review_pause=True)`. This is what makes "edit" able to route back through
+`recruiter_sim` for a fresh verdict instead of leaving `recruiter`/`hiring_manager`
+stale against an edited draft (README's old caveat).
 """
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
+from contextlib import asynccontextmanager
 from typing import Literal
 
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import END, StateGraph
+from langgraph.types import Command, interrupt
 
 from .config import settings
 from .coverage import hard_gap_gate, log_skip, retrieve_evidence, score_coverage
@@ -84,7 +100,36 @@ def load_job(state: JobState) -> dict:
     return {"notes": [f"loaded job {j.id} — {j.title or '(untitled)'} @ {j.company or '(unknown)'}"]}
 
 
-def build_graph(skip_render: bool = False, checkpointer=None):
+def human_review(state: JobState) -> dict:
+    """Pauses for approve/edit/reject (§9). Only reachable when `build_graph(review_pause=True)`
+    wired it in — automated `run()`/`run_many()` batch runs never hit this node.
+
+    `interrupt()` re-runs this node from the top on resume, so the whole body is cheap
+    and side-effect-free apart from returning the decision."""
+    decision = interrupt(
+        {"draft": state.draft, "recruiter": state.recruiter, "hiring_manager": state.hiring_manager}
+    )
+    action = decision.get("action", "approve")
+    if action == "edit":
+        return {
+            "draft": Draft.model_validate(decision["draft"]),
+            "human_decision": "edit",
+            "notes": ["human_review: edited — re-running recruiter_sim/hiring_manager"],
+        }
+    if action == "reject":
+        return {
+            "skip_reason": "rejected by user at review",
+            "human_decision": "reject",
+            "notes": ["human_review: rejected"],
+        }
+    return {"human_decision": "approve", "notes": ["human_review: approved"]}
+
+
+def human_review_gate(state: JobState) -> Literal["approve", "edit", "reject"]:
+    return state.human_decision or "approve"
+
+
+def build_graph(skip_render: bool = False, checkpointer=None, review_pause: bool = False):
     g = StateGraph(JobState)
     g.add_node("load_job", load_job)
     g.add_node("extract_requirements", extract_requirements)
@@ -128,17 +173,31 @@ def build_graph(skip_render: bool = False, checkpointer=None):
             {"hard_fail": "log_recruiter_fail", "proceed": "hiring_manager"},
         )
         g.add_edge("log_recruiter_fail", END)
-        g.add_edge("hiring_manager", "render_documents")
+        if review_pause:
+            g.add_node("human_review", human_review)
+            g.add_edge("hiring_manager", "human_review")
+            g.add_conditional_edges(
+                "human_review", human_review_gate,
+                {"approve": "render_documents", "edit": "recruiter_sim", "reject": END},
+            )
+        else:
+            g.add_edge("hiring_manager", "render_documents")
         g.add_edge("render_documents", "score_ats")
         g.add_edge("score_ats", END)
-    interrupt_before = ["render_documents"] if checkpointer is not None and not skip_render else []
-    return g.compile(checkpointer=checkpointer, interrupt_before=interrupt_before)
+    return g.compile(checkpointer=checkpointer)
 
 
-def run(jd_text: str, title: str = "", company: str = "", **job_fields) -> JobState:
-    """Run one JD through the graph and return the final state."""
-    skip_render = job_fields.pop("_skip_render", False)
-    job = Job(
+@asynccontextmanager
+async def _open_checkpointer():
+    """One `AsyncSqliteSaver` per call, WAL mode — concurrent `ainvoke`s (run_many) need
+    WAL, not the default rollback journal, or writers block each other."""
+    async with AsyncSqliteSaver.from_conn_string(str(settings.checkpoint_db_path)) as saver:
+        await saver.conn.execute("PRAGMA journal_mode=WAL")
+        yield saver
+
+
+def _build_job(jd_text: str, title: str, company: str, job_fields: dict) -> Job:
+    return Job(
         id=job_id(jd_text),
         source=job_fields.pop("source", "manual"),
         title=title,
@@ -146,10 +205,22 @@ def run(jd_text: str, title: str = "", company: str = "", **job_fields) -> JobSt
         jd_text=jd_text,
         **job_fields,
     )
-    config = {"callbacks": _tracing_callbacks()}
-    return JobState.model_validate(
-        build_graph(skip_render=skip_render).invoke(JobState(job=job), config=config)
-    )
+
+
+async def _run(jd_text: str, title: str, company: str, job_fields: dict) -> JobState:
+    skip_render = job_fields.pop("_skip_render", False)
+    job = _build_job(jd_text, title, company, job_fields)
+    async with _open_checkpointer() as saver:
+        graph = build_graph(skip_render=skip_render, checkpointer=saver)
+        config = {"configurable": {"thread_id": job.id}, "callbacks": _tracing_callbacks()}
+        result = await graph.ainvoke(JobState(job=job), config=config, durability="sync")
+    return JobState.model_validate(result)
+
+
+def run(jd_text: str, title: str = "", company: str = "", **job_fields) -> JobState:
+    """Run one JD through the graph and return the final state. Sync wrapper — the
+    checkpointer (durability, §2) is async, so this opens its own event loop."""
+    return asyncio.run(_run(jd_text, title, company, job_fields))
 
 
 async def run_many(jd_texts: list[str], **shared_job_fields) -> list[JobState]:
@@ -165,17 +236,19 @@ async def run_many(jd_texts: list[str], **shared_job_fields) -> list[JobState]:
     checked against persisted + in-flight-reserved spend, not persisted alone —
     persisted-only would let every job in the batch pass the same stale check and
     all run over cap, since nothing is persisted until run_many returns.
+
+    All jobs in the batch share ONE `AsyncSqliteSaver` (§2) — aiosqlite serializes
+    writes internally, so concurrent `ainvoke`s on separate `thread_id`s are safe.
     """
     from .budget import BudgetGuard, estimated_job_cost
     from .db.repo import already_processed
 
     skip_render = shared_job_fields.pop("_skip_render", False)
-    graph = build_graph(skip_render=skip_render)
     semaphore = asyncio.Semaphore(settings.max_concurrent_jobs)
-    config = {"callbacks": _tracing_callbacks()}
+    config_callbacks = _tracing_callbacks()
     guard = BudgetGuard.for_today()
 
-    async def _run_one(jd_text: str) -> JobState:
+    async def _run_one(jd_text: str, graph) -> JobState:
         job = Job(
             id=job_id(jd_text),
             source=shared_job_fields.get("source", "manual"),
@@ -192,8 +265,9 @@ async def run_many(jd_texts: list[str], **shared_job_fields) -> list[JobState]:
             if not await guard.try_reserve(est_cost):
                 return JobState(job=job, skip_reason="budget_cap_hit")
 
+            config = {"configurable": {"thread_id": job.id}, "callbacks": config_callbacks}
             try:
-                result = await graph.ainvoke(JobState(job=job), config=config)
+                result = await graph.ainvoke(JobState(job=job), config=config, durability="sync")
                 state = JobState.model_validate(result)
             except Exception:
                 await guard.release(est_cost)
@@ -201,60 +275,94 @@ async def run_many(jd_texts: list[str], **shared_job_fields) -> list[JobState]:
             await guard.settle(est_cost, state.total_cost_usd)
         return state
 
-    return list(await asyncio.gather(*(_run_one(jd) for jd in jd_texts)))
+    async with _open_checkpointer() as saver:
+        graph = build_graph(skip_render=skip_render, checkpointer=saver)
+        return list(await asyncio.gather(*(_run_one(jd, graph) for jd in jd_texts)))
+
+
+async def _run_for_review(jd_text: str, title: str, company: str, job_fields: dict) -> JobState:
+    job = _build_job(jd_text, title, company, job_fields)
+    async with _open_checkpointer() as saver:
+        graph = build_graph(skip_render=False, checkpointer=saver, review_pause=True)
+        config = {"configurable": {"thread_id": job.id}, "callbacks": _tracing_callbacks()}
+        result = await graph.ainvoke(JobState(job=job), config=config, durability="sync")
+    return JobState.model_validate(result)
 
 
 def run_for_review(jd_text: str, title: str = "", company: str = "", **job_fields) -> JobState:
-    """Like `run()`, but pauses before `render_documents` (§9) — nothing is written to
-    disk until `resume_review` approves it. The paused state has `draft`, `recruiter`
-    and `hiring_manager` filled in; `artifacts`/`ats` are not yet set."""
-    job = Job(
-        id=job_id(jd_text),
-        source=job_fields.pop("source", "manual"),
-        title=title,
-        company=company,
-        jd_text=jd_text,
-        **job_fields,
-    )
-    with SqliteSaver.from_conn_string(str(settings.checkpoint_db_path)) as saver:
-        graph = build_graph(skip_render=False, checkpointer=saver)
-        config = {"configurable": {"thread_id": job.id}, "callbacks": _tracing_callbacks()}
-        result = graph.invoke(JobState(job=job), config=config)
-    return JobState.model_validate(result)
+    """Like `run()`, but pauses at `human_review` (§9) — nothing is written to disk until
+    `resume_review(..., action="approve")` renders it. The paused state has `draft`,
+    `recruiter` and `hiring_manager` filled in; `artifacts`/`ats` are not yet set."""
+    return asyncio.run(_run_for_review(jd_text, title, company, job_fields))
 
 
-def resume_review(job_id_: str, approve: bool) -> JobState:
-    """Resume a job paused by `run_for_review`. `approve=False` never re-invokes the
-    graph — it just reads back the paused state and marks it rejected, so no render
-    happens and no further LLM calls are made."""
-    with SqliteSaver.from_conn_string(str(settings.checkpoint_db_path)) as saver:
-        graph = build_graph(skip_render=False, checkpointer=saver)
-        config: dict = {"configurable": {"thread_id": job_id_}, "callbacks": _tracing_callbacks()}
-        if not approve:
-            snapshot = graph.get_state(config)
+async def _resume_review(job_id_: str, action: Literal["approve", "edit", "reject"], draft: Draft | None) -> JobState:
+    async with _open_checkpointer() as saver:
+        graph = build_graph(skip_render=False, checkpointer=saver, review_pause=True)
+        config = {"configurable": {"thread_id": job_id_}, "callbacks": _tracing_callbacks()}
+        if action == "reject":
+            # Never re-invokes the graph — just reads back the paused state and marks it
+            # rejected, so no render happens and no further LLM calls are made.
+            snapshot = await graph.aget_state(config)
             return JobState.model_validate(
                 {**snapshot.values, "skip_reason": "rejected by user at review"}
             )
-        result = graph.invoke(None, config=config)
+        resume_payload: dict = {"action": action}
+        if action == "edit":
+            assert draft is not None, "action='edit' requires draft"
+            resume_payload["draft"] = draft.model_dump(mode="json")
+        result = await graph.ainvoke(Command(resume=resume_payload), config=config, durability="sync")
     return JobState.model_validate(result)
 
 
-def update_draft(job_id_: str, draft: Draft) -> None:
-    """Overwrite the checkpointed `draft` for a job paused by `run_for_review` (§9 edit).
-    Call before `resume_review` — `recruiter`/`hiring_manager` are NOT re-run, they still
-    reflect the original draft."""
-    with SqliteSaver.from_conn_string(str(settings.checkpoint_db_path)) as saver:
-        graph = build_graph(skip_render=False, checkpointer=saver)
+def resume_review(
+    job_id_: str, action: Literal["approve", "edit", "reject"], draft: Draft | None = None
+) -> JobState:
+    """Resume a job paused by `run_for_review` (or paused again after an "edit" loops
+    back through `recruiter_sim`/`hiring_manager`). `action="edit"` re-runs those two
+    nodes against the new draft and pauses again with a fresh verdict — this is what
+    keeps `recruiter`/`hiring_manager` from going stale against an edited draft."""
+    return asyncio.run(_resume_review(job_id_, action, draft))
+
+
+async def _get_paused_state(job_id_: str) -> JobState:
+    async with _open_checkpointer() as saver:
+        graph = build_graph(skip_render=False, checkpointer=saver, review_pause=True)
         config = {"configurable": {"thread_id": job_id_}}
-        graph.update_state(config, {"draft": draft})
+        snapshot = await graph.aget_state(config)
+    if not snapshot.values:
+        raise KeyError(f"no paused job found for id {job_id_!r}")
+    return JobState.model_validate(snapshot.values)
 
 
 def get_paused_state(job_id_: str) -> JobState:
     """Read back a job paused by `run_for_review`, without resuming it."""
-    with SqliteSaver.from_conn_string(str(settings.checkpoint_db_path)) as saver:
+    return asyncio.run(_get_paused_state(job_id_))
+
+
+async def _resume(job_id_: str) -> JobState:
+    async with _open_checkpointer() as saver:
+        config = {"configurable": {"thread_id": job_id_}, "callbacks": _tracing_callbacks()}
+        # `human_review` is a node the plain (non-review) graph never registers, so
+        # `next` under that topology silently omits a pending human_review task rather
+        # than naming it — probe with the review_pause=True (superset) topology first,
+        # which registers every node either graph could have paused at.
+        probe = build_graph(skip_render=False, checkpointer=saver, review_pause=True)
+        snapshot = await probe.aget_state(config)
+        if not snapshot.values:
+            raise KeyError(f"no in-progress job found for id {job_id_!r}")
+        if "human_review" in snapshot.next:
+            raise ValueError(f"job {job_id_!r} is paused for review — use 'jobpilot review' instead")
+        if not snapshot.next:
+            return JobState.model_validate(snapshot.values)  # already finished
         graph = build_graph(skip_render=False, checkpointer=saver)
-        config = {"configurable": {"thread_id": job_id_}}
-        snapshot = graph.get_state(config)
-    if not snapshot.values:
-        raise KeyError(f"no paused job found for id {job_id_!r}")
-    return JobState.model_validate(snapshot.values)
+        result = await graph.ainvoke(None, config=config, durability="sync")
+    return JobState.model_validate(result)
+
+
+def resume(job_id_: str) -> JobState:
+    """Continue a job whose process crashed mid-run (§2 durability) — replays from the
+    last checkpointed node, not from `load_job`, so `extract_requirements`/`diagnose`/
+    `rewrite` already paid for are not re-run. Only for the plain (non `--review`) path;
+    a job paused at `human_review` is continued via `resume_review` instead."""
+    return asyncio.run(_resume(job_id_))

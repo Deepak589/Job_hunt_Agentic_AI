@@ -37,9 +37,12 @@ Issues found running this for real, and what fixed them (full detail in
   instead of flat rate, so the cost number reflects what caching actually saves.
 - **Redundant re-computation** — `classify_role` re-ran on every rewrite retry;
   now `lru_cache`d by JD text.
-- **No resumability / crash recovery** — added a `SqliteSaver` checkpointer with
-  `interrupt_before=["render_documents"]`. A paused review survives a process
-  restart; `jobpilot add --review` / `jobpilot review <id>` resume from disk.
+- **No resumability / crash recovery** — every `run()`/`run_many()`/`add --review` now
+  opens an `AsyncSqliteSaver` checkpointer (WAL mode, `durability="sync"`), thread id =
+  job id. A paused review survives a process restart (`jobpilot review <id>` resumes
+  from disk); a crash mid-`add` is picked back up with `jobpilot resume <id>`, which
+  replays only the nodes that hadn't completed — `extract_requirements`/`diagnose`/
+  `rewrite` aren't re-paid for.
 - **No run history** — `db/repo.py` persists every `add`/`review` run (tokens,
   cost, coverage, verdict) to SQLite, not just stdout.
 - **Review score could be gamed** — `review_score` wasn't wired into `ats_score()`
@@ -66,10 +69,12 @@ Issues found running this for real, and what fixed them (full detail in
   fetch real postings; `--run` pipes each straight through the same pipeline as
   `jobpilot add`.
 - **Review pause was approve/reject only** — `jobpilot review <id>` now offers
-  approve/**edit**/reject. Edit opens the draft as YAML in `$EDITOR`, re-validates
-  on save, and writes it into the LangGraph checkpoint before resuming.
-  `recruiter`/`hiring_manager` are deliberately NOT re-run after an edit — they
-  still reflect the pre-edit draft.
+  approve/**edit**/reject. Edit opens the draft as YAML in `$EDITOR`, re-validates on
+  save, and resumes the graph with the new draft via a `human_review` node
+  (`interrupt()`/`Command(resume=...)`, replacing the old static
+  `interrupt_before=["render_documents"]`). This routes back through
+  `recruiter_sim`/`hiring_manager` for a fresh verdict and pauses again — they no
+  longer go stale against an edited draft the way they used to.
 - **Retrieval precision was single-signal (cosine only)** — added cross-encoder
   reranking (`evidence.rerank()`) as the threshold comment's own documented
   upgrade path, then *measured* it with `jobpilot index calibrate` instead of
@@ -98,6 +103,7 @@ jobpilot add --file jd.txt --full-time # lift the werkstudent weekly-hours cap
 jobpilot add --file jd.txt --no-render # gap report only, skip PDF + ATS score
 jobpilot add --file jd.txt --review    # pause before render; run 'jobpilot review <id>' to continue
 jobpilot review <id>                   # approve (render) / edit (fix a bullet first) / reject
+jobpilot resume <id>                   # continue a plain 'add' that crashed mid-run
 jobpilot add --dir jds/                # run every .txt JD in a directory concurrently
 
 jobpilot index build [--force]         # (re)build the evidence store from master_profile.yaml

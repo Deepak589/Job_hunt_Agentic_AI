@@ -130,7 +130,7 @@ def test_resume_review_approve_renders_and_scores(monkeypatch, tmp_path) -> None
     monkeypatch.setattr(settings, "checkpoint_db_path", tmp_path / "checkpoints.db")
 
     paused = graph_mod.run_for_review("third fake jd for approval", title="T", company="C")
-    resumed = graph_mod.resume_review(paused.job.id, approve=True)
+    resumed = graph_mod.resume_review(paused.job.id, action="approve")
 
     assert resumed.skip_reason is None
     assert resumed.artifacts.get("cv_pdf")
@@ -142,40 +142,113 @@ def test_resume_review_reject_never_renders(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(settings, "checkpoint_db_path", tmp_path / "checkpoints.db")
 
     paused = graph_mod.run_for_review("fourth fake jd for rejection", title="T", company="C")
-    rejected = graph_mod.resume_review(paused.job.id, approve=False)
+    rejected = graph_mod.resume_review(paused.job.id, action="reject")
 
     assert rejected.skip_reason == "rejected by user at review"
     assert rejected.artifacts == {}
     assert rejected.ats is None
 
 
-def test_update_draft_reflected_in_paused_state(monkeypatch, tmp_path) -> None:
+def test_resume_review_edit_reruns_recruiter_and_hiring_manager(monkeypatch, tmp_path) -> None:
+    """solution.md step 2: editing must NOT leave recruiter/hiring_manager stale against
+    the edited draft — it routes back through recruiter_sim for a fresh verdict and
+    pauses again (README's old caveat, now fixed)."""
     _patch_llm_nodes(monkeypatch)
     monkeypatch.setattr(settings, "checkpoint_db_path", tmp_path / "checkpoints.db")
+
+    calls: list[str] = []
+
+    def _counting_recruiter_sim(state):
+        calls.append("recruiter_sim")
+        return _fake_recruiter_sim(state)
+
+    monkeypatch.setattr(graph_mod, "recruiter_sim", _counting_recruiter_sim)
 
     paused = graph_mod.run_for_review("fifth fake jd for editing", title="T", company="C")
+    assert calls == ["recruiter_sim"]  # one pass to reach the first pause
+
     edited = paused.draft.model_copy(update={"profile_line": "Edited profile line."})
+    reviewed_again = graph_mod.resume_review(paused.job.id, action="edit", draft=edited)
 
-    graph_mod.update_draft(paused.job.id, edited)
-    fetched = graph_mod.get_paused_state(paused.job.id)
+    assert calls == ["recruiter_sim", "recruiter_sim"]  # edit re-ran it
+    assert reviewed_again.draft.profile_line == "Edited profile line."
+    assert reviewed_again.draft.bullets == paused.draft.bullets  # untouched fields survive
+    assert reviewed_again.artifacts == {}  # still paused, not rendered
+    assert reviewed_again.ats is None
 
-    assert fetched.draft.profile_line == "Edited profile line."
-    # untouched fields survive the update
-    assert fetched.draft.bullets == paused.draft.bullets
-    # recruiter/hiring_manager reflect the ORIGINAL draft — editing does not re-run them
-    assert fetched.hiring_manager.verdict == "apply"
+    resumed = graph_mod.resume_review(reviewed_again.job.id, action="approve")
+
+    assert resumed.skip_reason is None
+    assert resumed.draft.profile_line == "Edited profile line."
+    assert resumed.artifacts.get("cv_pdf")
 
 
-def test_update_draft_then_resume_renders_the_edited_draft(monkeypatch, tmp_path) -> None:
+# ------------------------------------------------------------------- crash recovery
+
+
+def test_resume_continues_without_repaying_completed_nodes(monkeypatch, tmp_path) -> None:
+    """solution.md step 2 verify: a crash mid-run must not force extract/diagnose/rewrite
+    to be re-paid for — `resume()` picks up from the last checkpointed node."""
+    monkeypatch.setattr(settings, "checkpoint_db_path", tmp_path / "checkpoints.db")
+    calls = {"extract": 0, "diagnose": 0, "rewrite": 0, "hiring_manager": 0}
+
+    def _extract(state):
+        calls["extract"] += 1
+        return _fake_extract_requirements(state)
+
+    def _diag(state):
+        calls["diagnose"] += 1
+        return _fake_diagnose(state)
+
+    def _rw(state):
+        calls["rewrite"] += 1
+        return _fake_rewrite(state)
+
+    crashed_once = {"done": False}
+
+    def _hiring_manager_crashes_once(state):
+        calls["hiring_manager"] += 1
+        if not crashed_once["done"]:
+            crashed_once["done"] = True
+            raise RuntimeError("simulated crash")
+        return _fake_hiring_manager(state)
+
+    monkeypatch.setattr(graph_mod, "extract_requirements", _extract)
+    monkeypatch.setattr(graph_mod, "diagnose", _diag)
+    monkeypatch.setattr(graph_mod, "rewrite", _rw)
+    monkeypatch.setattr(graph_mod, "review", _fake_review)
+    monkeypatch.setattr(graph_mod, "recruiter_sim", _fake_recruiter_sim)
+    monkeypatch.setattr(graph_mod, "hiring_manager", _hiring_manager_crashes_once)
+
+    jd_text = "crash test jd, quite unique"
+    job_id = graph_mod.job_id(jd_text)
+
+    try:
+        graph_mod.run(jd_text, title="T", company="C")
+    except RuntimeError:
+        pass
+
+    assert calls == {"extract": 1, "diagnose": 1, "rewrite": 1, "hiring_manager": 1}
+
+    resumed = graph_mod.resume(job_id)
+
+    assert calls["extract"] == 1  # not re-run
+    assert calls["diagnose"] == 1  # not re-run
+    assert calls["rewrite"] == 1  # not re-run
+    assert calls["hiring_manager"] == 2  # re-run — it never completed
+    assert resumed.hiring_manager is not None and resumed.hiring_manager.verdict == "apply"
+    assert resumed.artifacts.get("cv_pdf")
+
+
+def test_resume_rejects_a_job_paused_for_review(monkeypatch, tmp_path) -> None:
+    """resume() is for crashed plain runs — a job paused at human_review must be
+    continued via resume_review, not resume()."""
     _patch_llm_nodes(monkeypatch)
     monkeypatch.setattr(settings, "checkpoint_db_path", tmp_path / "checkpoints.db")
 
-    paused = graph_mod.run_for_review("sixth fake jd for edit then approve", title="T", company="C")
-    edited = paused.draft.model_copy(update={"profile_line": "Edited before approving."})
-    graph_mod.update_draft(paused.job.id, edited)
+    paused = graph_mod.run_for_review("paused for review, not a crash", title="T", company="C")
 
-    resumed = graph_mod.resume_review(paused.job.id, approve=True)
+    import pytest
 
-    assert resumed.skip_reason is None
-    assert resumed.draft.profile_line == "Edited before approving."
-    assert resumed.artifacts.get("cv_pdf")
+    with pytest.raises(ValueError, match="use 'jobpilot review'"):
+        graph_mod.resume(paused.job.id)
