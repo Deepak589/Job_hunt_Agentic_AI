@@ -216,17 +216,24 @@ def _build_job(jd_text: str, title: str, company: str, job_fields: dict) -> Job:
 
 async def _run(jd_text: str, title: str, company: str, job_fields: dict) -> JobState:
     skip_render = job_fields.pop("_skip_render", False)
+    prefill = job_fields.pop("_prefill", None) or {}
     job = _build_job(jd_text, title, company, job_fields)
     async with _open_checkpointer() as saver:
         graph = build_graph(skip_render=skip_render, checkpointer=saver)
         config = {"configurable": {"thread_id": job.id}, "callbacks": _tracing_callbacks()}
-        result = await graph.ainvoke(JobState(job=job), config=config, durability="sync")
+        result = await graph.ainvoke(JobState(job=job, **prefill), config=config, durability="sync")
     return JobState.model_validate(result)
 
 
 def run(jd_text: str, title: str = "", company: str = "", **job_fields) -> JobState:
     """Run one JD through the graph and return the final state. Sync wrapper — the
-    checkpointer (durability, §2) is async, so this opens its own event loop."""
+    checkpointer (durability, §2) is async, so this opens its own event loop.
+
+    `_prefill` (solution.md step 7, private kwarg, same convention as `_skip_render`):
+    `{"requirements": [...], "diagnosis": ...}` merged into the initial `JobState` before
+    `ainvoke` — a batch run already paid for extract/diagnose, so `extract_requirements`/
+    `diagnose` see the fields already set and skip (nodes/requirements.py,
+    nodes/diagnose.py); every other node still runs live exactly as today."""
     return asyncio.run(_run(jd_text, title, company, job_fields))
 
 
@@ -246,16 +253,22 @@ async def run_many(jd_texts: list[str], **shared_job_fields) -> list[JobState]:
 
     All jobs in the batch share ONE `AsyncSqliteSaver` (§2) — aiosqlite serializes
     writes internally, so concurrent `ainvoke`s on separate `thread_id`s are safe.
+
+    `_prefill_by_index` (solution.md step 7, private kwarg): `{index: {"requirements":
+    [...], "diagnosis": ...}}`, keyed by position in `jd_texts` — same skip mechanism as
+    `run`'s `_prefill`, for runner.py's `--batch` path where extract/diagnose already
+    ran via the Batches API for some (not necessarily all) jobs in this call.
     """
     from .budget import BudgetGuard, estimated_job_cost
     from .db.repo import already_processed
 
     skip_render = shared_job_fields.pop("_skip_render", False)
+    prefill_by_index = shared_job_fields.pop("_prefill_by_index", None) or {}
     semaphore = asyncio.Semaphore(settings.max_concurrent_jobs)
     config_callbacks = _tracing_callbacks()
     guard = BudgetGuard.for_today()
 
-    async def _run_one(jd_text: str, graph) -> JobState:
+    async def _run_one(jd_text: str, graph, prefill: dict) -> JobState:
         # shared_job_fields is one url (if any) shared across the whole batch — real per-job
         # urls never flow through this path (sourcing modules run one at a time via
         # graph.run(), not run_many); job_id falls back to content-hash whenever url is "".
@@ -277,7 +290,7 @@ async def run_many(jd_texts: list[str], **shared_job_fields) -> list[JobState]:
 
             config = {"configurable": {"thread_id": job.id}, "callbacks": config_callbacks}
             try:
-                result = await graph.ainvoke(JobState(job=job), config=config, durability="sync")
+                result = await graph.ainvoke(JobState(job=job, **prefill), config=config, durability="sync")
                 state = JobState.model_validate(result)
             except Exception:
                 await guard.release(est_cost)
@@ -287,7 +300,9 @@ async def run_many(jd_texts: list[str], **shared_job_fields) -> list[JobState]:
 
     async with _open_checkpointer() as saver:
         graph = build_graph(skip_render=skip_render, checkpointer=saver)
-        return list(await asyncio.gather(*(_run_one(jd, graph) for jd in jd_texts)))
+        return list(await asyncio.gather(
+            *(_run_one(jd, graph, prefill_by_index.get(i, {})) for i, jd in enumerate(jd_texts))
+        ))
 
 
 async def _run_for_review(jd_text: str, title: str, company: str, job_fields: dict) -> JobState:

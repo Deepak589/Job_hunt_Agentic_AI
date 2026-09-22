@@ -168,6 +168,73 @@ def record_snapshot_failure(company: str, ats: str, db_path: Path | None = None)
     return streak
 
 
+def record_application(job_id: str, cv_pdf_sha: str, db_path: Path | None = None) -> None:
+    """Upsert `applications` on `jobpilot applied <id>`. Re-sending the same job updates
+    sent_at/cv_pdf_sha instead of duplicating a row."""
+    path = db_path or settings.jobs_db_path
+    init_db(path)
+    now = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            """
+            INSERT INTO applications (job_id, sent_at, cv_pdf_sha)
+            VALUES (?, ?, ?)
+            ON CONFLICT(job_id) DO UPDATE SET sent_at = excluded.sent_at, cv_pdf_sha = excluded.cv_pdf_sha
+            """,
+            (job_id, now, cv_pdf_sha),
+        )
+        conn.commit()
+
+
+_OUTCOMES = ("interview", "reject", "ghost")
+
+
+def record_outcome(job_id: str, outcome: str, db_path: Path | None = None) -> None:
+    """`jobpilot outcome <id> <outcome>`. Validated here (not just in the CLI) since this
+    may get called from other code later. Raises KeyError if `jobpilot applied <id>`
+    was never run for this job."""
+    if outcome not in _OUTCOMES:
+        raise ValueError(f"outcome must be one of {_OUTCOMES}, got {outcome!r}")
+    path = db_path or settings.jobs_db_path
+    init_db(path)
+    now = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(path) as conn:
+        cur = conn.execute(
+            "UPDATE applications SET outcome = ?, outcome_at = ? WHERE job_id = ?",
+            (outcome, now, job_id),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            raise KeyError(f"no application recorded for job_id {job_id!r} — run 'jobpilot applied {job_id}' first")
+
+
+def record_judgement(job_id: str, node: str, score_or_verdict: str, human_action: str, db_path: Path | None = None) -> None:
+    """One row per judge verdict at a human_review pause (solution.md step 8) — the raw
+    material for `judgestats.judge_stats`'s Cohen's κ."""
+    path = db_path or settings.jobs_db_path
+    init_db(path)
+    now = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "INSERT INTO judgements (id, job_id, node, score_or_verdict, human_action, recorded_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (uuid.uuid4().hex, job_id, node, score_or_verdict, human_action, now),
+        )
+        conn.commit()
+
+
+def judgement_pairs(node: str, db_path: Path | None = None) -> list[tuple[str, str]]:
+    """(judge_output, human_action) pairs for one judge node, for Cohen's κ."""
+    path = db_path or settings.jobs_db_path
+    init_db(path)
+    with sqlite3.connect(path) as conn:
+        rows = conn.execute(
+            "SELECT score_or_verdict, human_action FROM judgements WHERE node = ?",
+            (node,),
+        ).fetchall()
+    return [(a, b) for a, b in rows]
+
+
 def cost_summary(db_path: Path | None = None, since: datetime | None = None) -> dict:
     """Per-day + all-time run count/tokens/$ from the `runs` table.
 

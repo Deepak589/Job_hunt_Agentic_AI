@@ -4,7 +4,10 @@ logic (reordering, score attachment, cosine preserved) rather than the model."""
 
 from __future__ import annotations
 
-from agentic_ai import evidence
+import chromadb
+
+from agentic_ai import evidence, repo_docs
+from agentic_ai.profile import Profile
 from agentic_ai.state import Evidence
 
 
@@ -62,3 +65,35 @@ def test_rerank_empty_list_is_a_noop(monkeypatch) -> None:
 
     assert evidence.rerank("q", []) == []
     assert not called
+
+
+def test_build_index_tags_repo_doc_chunks_and_retrieve_many_reports_their_source(monkeypatch):
+    """build_index() must embed repo_doc chunks alongside bullets, and retrieve_many()
+    must read `source` back from metadata instead of hardcoding "cv_bullet" — otherwise a
+    retrieved repo_doc chunk silently relabels as a cv_bullet (the bug this step fixes)."""
+    monkeypatch.setattr(evidence, "_client", lambda: chromadb.EphemeralClient())
+    monkeypatch.setattr(evidence, "embed", lambda texts: [[0.1, 0.2, 0.3] for _ in texts])
+    monkeypatch.setattr(
+        repo_docs, "fetch_repo_files",
+        lambda owner, repo: [{
+            "path": "README.md",
+            "sha": "abc123",
+            "content": "# Built Agents\nI built autonomous agents myself using LangGraph.",
+        }],
+    )
+
+    profile = Profile(
+        raw={"projects": [{"id": "proj.rag", "repo": "github.com/Deepak589/RAG_pipeline"}]},
+        bullets=[],
+        skills=[],
+    )
+    count = evidence.build_index(profile=profile, force=True)
+    assert count == 1
+
+    collection = evidence.get_collection()
+    got = collection.get(ids=["repo:proj.rag:README.md#built-agents"], include=["metadatas"])
+    assert got["metadatas"][0]["source"] == "repo_doc"
+    assert got["metadatas"][0]["parent_id"] == "proj.rag"
+
+    [results] = evidence.retrieve_many(["built agents myself"], collection=collection)
+    assert results[0].source == "repo_doc"

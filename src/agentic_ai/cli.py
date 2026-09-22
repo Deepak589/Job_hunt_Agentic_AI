@@ -20,6 +20,7 @@ import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Literal
 
 import typer
 from rich.console import Console
@@ -285,6 +286,19 @@ def _edit_draft(draft):
         path.unlink(missing_ok=True)
 
 
+def _record_judgements(job_id: str, state, human_action: str) -> None:
+    """One row per judge node that had a verdict at this pause (solution.md step 8) —
+    all sharing the same human_action, the raw material judge_stats' kappa needs."""
+    from .db import repo
+
+    if state.recruiter is not None:
+        repo.record_judgement(job_id, "recruiter_sim", state.recruiter.result, human_action)
+    if state.hiring_manager is not None:
+        repo.record_judgement(job_id, "hiring_manager", state.hiring_manager.verdict, human_action)
+    if state.scores.review_score is not None:
+        repo.record_judgement(job_id, "review", str(state.scores.review_score), human_action)
+
+
 @app.command()
 def review(job_id: str, verbose: bool = typer.Option(False, "--verbose", "-v")) -> None:
     """Approve, edit, or reject a job paused by 'jobpilot add --review' (§9). An edit
@@ -292,6 +306,7 @@ def review(job_id: str, verbose: bool = typer.Option(False, "--verbose", "-v")) 
     fresh verdict — approve/reject never re-run those, so their verdict cannot go stale."""
     from .db.repo import persist_run
     from .graph import get_paused_state, resume_review
+    from .preferences import diff_edited_bullets, record_preferences
 
     try:
         paused = get_paused_state(job_id)
@@ -306,15 +321,22 @@ def review(job_id: str, verbose: bool = typer.Option(False, "--verbose", "-v")) 
     while True:
         choice = typer.prompt("\napprove (a) / edit (e) / reject (r)?").strip().lower()
         if choice in ("a", "approve"):
+            _record_judgements(job_id, paused, "approve")
             state = resume_review(job_id, action="approve")
             break
         if choice in ("r", "reject"):
+            _record_judgements(job_id, paused, "reject")
             state = resume_review(job_id, action="reject")
             break
         if choice in ("e", "edit"):
             edited = _edit_draft(paused.draft)
             if edited is None:
                 continue
+            _record_judgements(job_id, paused, "edit")
+            if paused.draft is not None:
+                changed = diff_edited_bullets(paused.draft, edited)
+                if changed:
+                    record_preferences(changed)
             paused = resume_review(job_id, action="edit", draft=edited)
             if paused.skip_reason:  # e.g. recruiter hard-failed the edited draft
                 state = paused
@@ -350,6 +372,56 @@ def resume(job_id: str) -> None:
     _log_run(state)
     _report(state, verbose=False)
     raise typer.Exit(1 if state.skip_reason else 0)
+
+
+@app.command()
+def applied(job_id: str) -> None:
+    """Record that job_id's tailored CV was sent. Reads the rendered draft's hash from
+    out/<id>/draft.sha (render.py's idempotent-render marker, solution.md step 2)."""
+    from .db.repo import record_application
+    from .render import OUT_DIR
+
+    sha_path = OUT_DIR / job_id / "draft.sha"
+    if sha_path.exists():
+        cv_pdf_sha = sha_path.read_text().strip()
+    else:
+        cv_pdf_sha = ""
+        console.print(f"[yellow]warning:[/yellow] no rendered PDF found for job {job_id} (no {sha_path})")
+
+    record_application(job_id, cv_pdf_sha)
+    console.print(f"recorded application for {job_id}")
+
+
+@app.command()
+def outcome(
+    job_id: str,
+    outcome: Literal["interview", "reject", "ghost"] = typer.Argument(..., help="interview | reject | ghost"),
+) -> None:
+    """Record what happened after applying. Run 'jobpilot applied <id>' first."""
+    from .db.repo import record_outcome
+
+    try:
+        record_outcome(job_id, outcome)
+    except KeyError as exc:
+        raise typer.BadParameter(str(exc)) from None
+    console.print(f"recorded outcome for {job_id}: {outcome}")
+
+
+@app.command("judge-stats")
+def judge_stats_cmd() -> None:
+    """Cohen's kappa per judge node vs what the human actually did at review."""
+    from .db.repo import judgement_pairs
+    from .judgestats import judge_stats
+
+    stats = judge_stats()
+    table = Table(show_lines=False)
+    table.add_column("Node")
+    table.add_column("kappa", justify="right")
+    table.add_column("N", justify="right")
+    for node, kappa in stats.items():
+        n = len(judgement_pairs(node))
+        table.add_row(node, f"{kappa:.3f}" if kappa is not None else "not enough data", str(n))
+    console.print(table)
 
 
 @app.command()
@@ -665,12 +737,15 @@ def run(
         None, "--companies", help="Path to companies.yaml (default: config/companies.yaml)."
     ),
     digest: str = typer.Option("", "--digest", help="Output format: 'json' for machine-readable stdout."),
+    batch: bool = typer.Option(
+        False, "--batch", help="Submit extract+diagnose via the Anthropic Batches API (~50% cheaper, slower)."
+    ),
 ) -> None:
     """Poll every configured company (config/companies.yaml), run genuinely new
     postings through the pipeline, print a digest. Meant for a scheduler (see ops/)."""
     from . import runner as runner_mod
 
-    result = runner_mod.run(companies)
+    result = runner_mod.run(companies, batch=batch)
 
     if digest == "json":
         print(json.dumps(result))

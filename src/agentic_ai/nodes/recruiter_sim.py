@@ -1,28 +1,14 @@
-"""recruiter_sim — LLM call 5, Haiku (plan.md §7, CLAUDE.md role 4). Fast, shallow,
-keyword-literal on purpose — simulating a shallow filter with a deep model defeats
-the point.
+"""recruiter_sim — deterministic keyword-literal ATS scan (plan.md §7, CLAUDE.md role 4,
+solution.md step 9). Was an LLM call (Haiku); a shallow keyword scanner needs no model —
+it's pure substring matching, same domain `scoring/ats.py`'s literal-keywords component
+already checks.
 """
 
 from __future__ import annotations
 
-import functools
 from typing import Literal
 
-from langchain_core.messages import HumanMessage, SystemMessage
-
-from ..config import settings
-from ..llm import invoke_structured, make_structured
 from ..state import JobState, RecruiterResult
-
-
-@functools.lru_cache(maxsize=1)
-def _prompt() -> str:
-    return (settings.prompts_dir / "recruiter_sim.md").read_text()
-
-
-@functools.lru_cache(maxsize=1)
-def _model():
-    return make_structured(settings.recruiter_model, RecruiterResult, max_tokens=1024)
 
 
 def _rendered_cv_text(state: JobState) -> str:
@@ -34,23 +20,36 @@ def _rendered_cv_text(state: JobState) -> str:
 
 
 def recruiter_sim(state: JobState, verbose: bool = False) -> dict:
-    assert state.draft is not None, "recruiter_sim requires rewrite to have run first"
-    hard_reqs = "\n".join(f"- {r.text}" for r in state.hard())
-    human = (
-        f"<job_description>\n{state.job.jd_text.strip()}\n</job_description>\n\n"
-        f"<hard_requirements>\n{hard_reqs}\n</hard_requirements>\n\n"
-        f"<cv_text>\n{_rendered_cv_text(state)}\n</cv_text>"
-    )
-    messages = [
-        SystemMessage(content=[{"type": "text", "text": _prompt(), "cache_control": {"type": "ephemeral"}}]),
-        HumanMessage(content=human),
-    ]
+    """Deterministic literal-keyword screen. Only checks requirements the pipeline
+    already believes are covered — an uncovered hard requirement already failed
+    upstream (hard-gap gate) or is an accepted known gap; this node isn't re-litigating
+    coverage, only whether what's believed covered actually shows up verbatim in the
+    draft (the thing a real keyword-scanning ATS would check).
 
-    verdict, usage = invoke_structured(_model(), messages, model=settings.recruiter_model, node="recruiter_sim", verbose=verbose)
+    Note: this node's output space is now binary (pass/hard_fail) — there's no
+    natural deterministic "soft_fail" left once the check is per-requirement
+    literal-substring-or-not. `RecruiterResult.result` keeps "soft_fail" as a valid
+    literal for other code/tests, but this node never returns it (solution.md step 9
+    ruling: no threshold invented to keep a third bucket alive with no data behind it).
+    """
+    assert state.draft is not None, "recruiter_sim requires rewrite to have run first"
+    cv_text = _rendered_cv_text(state).lower()
+
+    covered_hard = [r for r in state.hard() if r.covered]
+    missing = [r for r in covered_hard if not any(kw.lower() in cv_text for kw in r.keywords)]
+
+    if missing:
+        result: Literal["pass", "hard_fail"] = "hard_fail"
+        reason = "hard requirement(s) not found verbatim in draft: " + ", ".join(r.text for r in missing)
+    else:
+        result = "pass"
+        reason = "all covered hard requirements' keywords present"
+
+    verdict = RecruiterResult(result=result, reason=reason)
     return {
         "recruiter": verdict,
         "notes": [f"recruiter_sim: {verdict.result} — {verdict.reason}"],
-        "llm_calls": usage,
+        "llm_calls": [],
     }
 
 

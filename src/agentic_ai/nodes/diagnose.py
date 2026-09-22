@@ -49,6 +49,10 @@ def _profile_brief(profile: Profile) -> str:
 
 
 def diagnose(state: JobState, verbose: bool = False) -> dict:
+    """Graph node. No-op if `state.diagnosis` is already populated (solution.md step 7
+    — same prefill-skip reasoning as `extract_requirements`)."""
+    if state.diagnosis is not None:
+        return {}
     profile = Profile.load()
     # Profile block first + cache_control: identical across every job in a run, unlike
     # the job-specific blocks after it. diagnose runs once per job (no retry loop back

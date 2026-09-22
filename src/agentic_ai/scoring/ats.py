@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from pypdf import PdfReader
 
 from ..config import settings
+from ..judgestats import review_cap_still_trusted
 from ..profile import Profile
 from ..state import AtsScore, AtsVerdict, JobState
 
@@ -98,8 +99,16 @@ def ats_score(state: JobState, pdf: ParsedPdf, profile: Profile) -> AtsScore:
     # Counted points can't see that judgment, so cap the total below "apply" rather
     # than let a weak-but-fact-clean draft read as a 97+. This is a cap, not a gate:
     # nothing here is fabricated, so it stays fix_then_apply, never skip.
+    # solution.md step 9: the cap only holds while the review judge is trustworthy —
+    # skip it once there's enough real history (>= 30 judgements) showing kappa(review)
+    # < 0.4 against real human decisions (review_cap_still_trusted, judgestats.py).
     review_score = state.scores.review_score
-    review_capped = not failed and review_score is not None and review_score < settings.min_review_score
+    review_capped = (
+        not failed
+        and review_score is not None
+        and review_score < settings.min_review_score
+        and review_cap_still_trusted()
+    )
     if review_capped:
         total = min(total, 94.0)
 

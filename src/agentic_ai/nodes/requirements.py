@@ -76,7 +76,12 @@ def extract(jd_text: str, verbose: bool = False) -> tuple[list[Requirement], lis
 
 
 def extract_requirements(state: JobState) -> dict:
-    """Graph node."""
+    """Graph node. No-op if `state.requirements` is already populated (solution.md
+    step 7 — a batch run's extract call already filled it via `_prefill`; neither this
+    node nor `diagnose` has a retry edge back to itself, so skipping on prefill can't
+    strand a retry loop with stale requirements)."""
+    if state.requirements:
+        return {}
     reqs, usage = extract(state.job.jd_text)
     counts = {t: sum(1 for r in reqs if r.type == t) for t in ("hard", "soft", "disqualifier")}
     return {

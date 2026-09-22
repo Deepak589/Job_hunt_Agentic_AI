@@ -50,3 +50,22 @@ CREATE TABLE IF NOT EXISTS company_snapshots (
   consecutive_failures INTEGER DEFAULT 0,
   PRIMARY KEY (company, ats)
 );
+
+-- step 8: closing the loop — did an application go out, what happened, did the human
+-- agree with each judge node's verdict.
+CREATE TABLE IF NOT EXISTS applications (
+  job_id TEXT PRIMARY KEY REFERENCES jobs(id),
+  sent_at TEXT,
+  cv_pdf_sha TEXT,
+  outcome TEXT,           -- interview | reject | ghost | NULL (not yet known)
+  outcome_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS judgements (
+  id TEXT PRIMARY KEY,        -- uuid4 hex — one row per (judge_node, decision_point), a job can have several (multiple edit loops)
+  job_id TEXT REFERENCES jobs(id),
+  node TEXT,                  -- 'recruiter_sim' | 'hiring_manager' | 'review'
+  score_or_verdict TEXT,      -- the judge's output at that pause: recruiter.result / hiring_manager.verdict / str(review_score)
+  human_action TEXT,          -- 'approve' | 'edit' | 'reject' — what the human did at that same pause
+  recorded_at TEXT
+);

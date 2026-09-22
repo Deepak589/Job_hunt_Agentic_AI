@@ -84,6 +84,48 @@ Issues found running this for real, and what fixed them (full detail in
   because the data says it would make coverage worse, not better.
 - **No latency/tracing visibility** — optional Langfuse tracing wired into every
   graph invocation (see "Tracing" below). No-op unless configured.
+- **Live ingestion covered one job board, not a real pipeline** — `runner.py` +
+  `sourcing/` now poll multiple ATS boards (`personio`, `greenhouse`, `lever`,
+  `ashby`, plus `adzuna`/`arbeitnow`) off a single `config/companies.yaml`,
+  dedupe against `db/repo.py`'s job history so a re-poll costs nothing on
+  unchanged postings, and are meant to run unattended via `jobpilot run`
+  (`ops/com.jobpilot.run.plist.template` — a scheduler launchd/cron template,
+  not a hosted service). Three consecutive fetch failures for one company are
+  logged and surfaced in the digest instead of failing silently.
+- **Batch mode was one JD at a time even for a nightly backlog** — `jobpilot run
+  --batch` submits `extract_requirements`+`diagnose` for every new posting
+  through the Anthropic Batches API (`batch.py`) instead of live calls: ~50%
+  cheaper, tool-forced structured output (the Batches API doesn't support the
+  `json_schema` method the live path uses), then prefills those two nodes into
+  `run_many()` so the rest of the graph doesn't redo LLM calls the batch already
+  paid for. Falls back to a live call per-job if a batch entry errored.
+- **CV claims for "built X myself" projects had no source of truth beyond the
+  hand-maintained profile** — `repo_docs.py` fetches a GitHub repo's README +
+  top-level `docs/*.md` (unauthenticated REST API, SHA-cached so unchanged repos
+  aren't re-fetched) and chunks them by heading into the evidence store
+  alongside CV bullets, so `jobpilot index build` can cite a repo's own docs as
+  evidence for a requirement, not just what's already written in
+  `master_profile.yaml`.
+- **No feedback loop after applying — outcomes were never recorded or reused**
+  — `jobpilot applied <id>` logs that a tailored CV was sent (keyed to the
+  rendered PDF's content hash, so a re-render is distinguishable from the one
+  actually submitted); `jobpilot outcome <id> interview|reject|ghost` records
+  what happened. `jobpilot judge-stats` computes Cohen's kappa (`judgestats.py`)
+  between each judge node's verdict (`review`/`recruiter_sim`/`hiring_manager`)
+  and the human's actual review action, so agreement is measured, not assumed —
+  `ats_score()`'s review-score cap is skipped when kappa is too low with enough
+  history to trust it, so a judge that's drifted from human judgement stops
+  quietly warping the score.
+- **A human's edit during `jobpilot review` was thrown away after that one run**
+  — `preferences.py` diffs the pre/post-edit draft, records the changed bullets
+  to `data/preferences.yaml` (deduped on overlap), and `rewrite` now includes a
+  "user preferences" block in its prompt when one exists — so a correction made
+  once (e.g. "don't call it 'led', I was one of three") persists into future
+  drafts instead of getting silently reverted next run.
+- **ATS score could drift when a rewritten draft reordered CV sections** — new
+  `test_invariance.py` pins `ats_total` and `recruiter_sim`'s result to be
+  identical regardless of section order, catching a scoring bug the existing
+  per-component tests wouldn't have (they never varied section order).
 
 ## Setup
 
@@ -114,10 +156,23 @@ jobpilot profile check                 # validate master_profile.yaml integrity
 jobpilot cost                          # all-time spend summary from the runs ledger
 jobpilot cost --days 7                 # spend summary for the last 7 days
 
+jobpilot applied <id>                  # record that the tailored CV was sent
+jobpilot outcome <id> interview        # record what happened: interview | reject | ghost
+jobpilot judge-stats                   # Cohen's kappa: judge verdicts vs human review actions
+
 jobpilot source arbeitnow --query "Werkstudent" --location Berlin   # no auth required
 jobpilot source arbeitnow --query "Data Scientist" --run            # fetch + run each JD through the pipeline
 jobpilot source adzuna --query "Data Scientist" --location Berlin   # requires ADZUNA_APP_ID/ADZUNA_APP_KEY
+
+jobpilot run                           # poll config/companies.yaml, run genuinely new postings, print a digest
+jobpilot run --batch                   # same, but extract+diagnose via the Batches API (~50% cheaper, slower)
+jobpilot run --digest json             # machine-readable digest (for the scheduler in ops/)
 ```
+
+`config/companies.yaml` lists companies to poll on ATS boards that don't need
+credentials (`personio`, `greenhouse`, `lever`, `ashby` — matches
+`runner._CONNECTORS`). `jobpilot run` is meant to be driven by a scheduler, not
+run ad hoc — see `ops/README.md` and `ops/com.jobpilot.run.plist.template`.
 
 Set `JOBPILOT_MAX_DAILY_COST_USD` (env or `.env`) to cap daily spend — `jobpilot add`
 checks today's total against it before running the graph and refuses (exit 1, no LLM
@@ -141,13 +196,25 @@ the `tracing` extra: `uv sync --extra tracing`.
 ```
 src/agentic_ai/
   graph.py          LangGraph pipeline wiring
+  runner.py          multi-company polling, dedupe, batch prefill, notify-on-failure
+  batch.py            Anthropic Batches API client (nightly/cheap mode)
   nodes/             requirements, diagnose, rewrite, validate_facts, review
+  sourcing/           one connector per job board (adzuna, arbeitnow, personio,
+                       greenhouse, lever, ashby, linkedin_apify) + base.py's shared
+                       JobSource protocol
   scoring/ats.py      ATS score fact-table + arithmetic
   validators/facts.py fabrication gate
   evidence.py         Chroma-backed semantic evidence store
+  repo_docs.py         GitHub README/docs.md ingestion into the evidence store
+  preferences.py       procedural memory from human edits during review
+  judgestats.py        Cohen's kappa — judge verdict vs human review action
   profile.py          master_profile.yaml loader/validator
   render.py            Typst PDF rendering
+  db/repo.py            SQLite persistence: jobs, runs, applications, judgements
 data/master_profile.yaml   source of truth: bullets, skills, evidence
+data/preferences.yaml      learned bullet-level corrections from past edits
+config/companies.yaml      companies to poll for `jobpilot run`
+ops/                        scheduler template for `jobpilot run`
 templates/*.typ            CV + cover letter templates
 tests/                      pytest suite
 evals/                      golden + real JD fixtures

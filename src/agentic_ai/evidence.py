@@ -1,9 +1,10 @@
 """Evidence store — per-bullet retrieval over the master profile (plan.md §5.2).
 
-Phase 1 indexes CV bullets only: 20 chunks, one per bullet, text = outcome + metric +
-method. Skill names are deliberately NOT embedded — they are the keyword half of the §6
-two-signal match, and embedding them too would let one signal answer for both. Repo
-READMEs and docs/*.md are §5.3, Phase 4.
+CV bullets: one chunk per bullet, text = outcome + metric + method. Skill names are
+deliberately NOT embedded — they are the keyword half of the §6 two-signal match, and
+embedding them too would let one signal answer for both. Repo READMEs and docs/*.md
+(§5.3, solution.md step 10) are chunked by heading and indexed alongside them, see
+`_repo_doc_chunks`/`repo_docs.py`.
 
 Decomposing per bullet is the point (§5): "embed whole CV, embed whole JD, cosine" rates
 "both documents are about tech" highly and tells you nothing actionable. A per-requirement
@@ -17,6 +18,7 @@ import functools
 import chromadb
 from chromadb.api.models.Collection import Collection
 
+from . import repo_docs
 from .config import settings
 from .profile import Profile
 from .state import Evidence
@@ -68,11 +70,32 @@ def get_collection() -> Collection:
     return _client().get_collection(settings.collection_name)
 
 
+def _repo_doc_chunks(profile: Profile) -> list[tuple[str, str, str]]:
+    """(chunk_id, chunk_text, parent_project_id) for every project with a `repo:` field.
+
+    SHA-cached at the fetch layer (repo_docs.fetch_repo_files) — an unchanged file isn't
+    re-downloaded, but is still re-chunked+re-embedded here since 20-ish chunks is cheap
+    and this module has no incremental-add path into Chroma (build_index rebuilds fresh
+    on `force`).
+    """
+    chunks: list[tuple[str, str, str]] = []
+    for project in profile.raw.get("projects", []):
+        repo_url = project.get("repo")
+        if not repo_url:
+            continue
+        owner, repo = repo_docs.parse_repo_url(repo_url)
+        for f in repo_docs.fetch_repo_files(owner, repo):
+            prefix = f"repo:{project['id']}:{f['path']}"
+            for chunk_id, chunk_text in repo_docs.chunk_by_heading(f["content"], prefix):
+                chunks.append((chunk_id, chunk_text, project["id"]))
+    return chunks
+
+
 def build_index(profile: Profile | None = None, force: bool = False) -> int:
     """(Re)build the evidence collection. Returns the chunk count.
 
-    20 chunks rebuild in seconds, so there is no SHA-based incremental caching — that is
-    §5.3's problem, once real repo docs are in here.
+    Bullets rebuild in seconds, so there is no SHA-based incremental caching for them.
+    Repo docs (§5.3) are SHA-cached at the fetch layer instead — see `_repo_doc_chunks`.
     """
     profile = profile or Profile.load()
     client = _client()
@@ -92,20 +115,34 @@ def build_index(profile: Profile | None = None, force: bool = False) -> int:
 
     bullets = profile.bullets
     texts = [b.as_evidence_text() for b in bullets]
-    collection.add(
-        ids=[b.id for b in bullets],
-        documents=texts,
-        embeddings=embed(texts),
-        metadatas=[
-            {
-                "source": b.source,
-                "parent_id": b.parent_id,
-                "tags": ",".join(b.tags),
-                "status": b.status or "",
-            }
-            for b in bullets
-        ],
-    )
+    if texts:
+        collection.add(
+            ids=[b.id for b in bullets],
+            documents=texts,
+            embeddings=embed(texts),
+            metadatas=[
+                {
+                    "source": b.source,
+                    "parent_id": b.parent_id,
+                    "tags": ",".join(b.tags),
+                    "status": b.status or "",
+                }
+                for b in bullets
+            ],
+        )
+
+    repo_chunks = _repo_doc_chunks(profile)
+    if repo_chunks:
+        chunk_texts = [text for _, text, _ in repo_chunks]
+        collection.add(
+            ids=[cid for cid, _, _ in repo_chunks],
+            documents=chunk_texts,
+            embeddings=embed(chunk_texts),
+            metadatas=[
+                {"source": "repo_doc", "parent_id": parent_id, "tags": "", "status": ""}
+                for _, _, parent_id in repo_chunks
+            ],
+        )
     return collection.count()
 
 
@@ -133,7 +170,7 @@ def retrieve_many(
     groups = [
         [
             Evidence(
-                source="cv_bullet",
+                source=str(meta.get("source") or "cv_bullet"),
                 source_id=sid,
                 text=doc,
                 # cosine space: distance in [0, 2], similarity = 1 - distance

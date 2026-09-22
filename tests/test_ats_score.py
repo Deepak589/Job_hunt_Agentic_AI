@@ -2,9 +2,21 @@
 
 from __future__ import annotations
 
+import pytest
+
+from agentic_ai.config import settings
+from agentic_ai.db.repo import record_judgement
 from agentic_ai.profile import Profile
 from agentic_ai.scoring.ats import ParsedPdf, ats_score, gates_failed
 from agentic_ai.state import Draft, DraftBullet, Job, JobState, Requirement, Scores
+
+
+@pytest.fixture(autouse=True)
+def _isolate_db(tmp_path, monkeypatch):
+    """ats_score() -> review_cap_still_trusted() -> judgement_pairs() touches the jobs
+    db (solution.md step 9) — every test in this file must use an isolated db, not the
+    real on-disk data/jobpilot.db, even ones that don't otherwise care about judgements."""
+    monkeypatch.setattr(settings, "jobs_db_path", tmp_path / "jobpilot.db")
 
 
 def _profile() -> Profile:
@@ -129,6 +141,49 @@ def test_verdict_thresholds() -> None:
     assert verdict_for(94) == "fix_then_apply"
     assert verdict_for(90) == "fix_then_apply"
     assert verdict_for(89.9) == "skip"
+
+
+def test_review_cap_still_applies_with_no_judgement_history() -> None:
+    """solution.md step 9: fresh install, no judgements recorded yet — cap behaves
+    exactly as before (< 30 pairs keeps the cap trusted)."""
+    profile = _profile()
+    s = _clean_state(review_score=4)
+    pdf = ParsedPdf(recovered=14, expected=14)
+    result = ats_score(s, pdf, profile)
+    assert result.total <= 94.0
+    assert "CAPPED" in result.report
+
+
+def test_review_cap_skipped_when_kappa_below_threshold_with_enough_history() -> None:
+    """>= 30 review judgements, engineered to disagree with human (kappa < 0.4) — the
+    judge is shown unreliable, so a fact-clean-but-low-review draft is not held below
+    'apply' by a cap that can't be trusted."""
+    for i in range(15):
+        record_judgement(f"j{i}a", "review", "9", "edit")  # judge says pass, human disagrees
+        record_judgement(f"j{i}b", "review", "3", "approve")  # judge says retry, human disagrees
+
+    profile = _profile()
+    s = _clean_state(review_score=4)
+    pdf = ParsedPdf(recovered=14, expected=14, text="Built a python RAG pipeline.")
+    result = ats_score(s, pdf, profile)
+    assert "CAPPED" not in result.report
+    assert result.total > 94.0
+
+
+def test_review_cap_still_applies_when_kappa_above_threshold_with_enough_history() -> None:
+    """>= 30 review judgements, engineered to mostly agree with human (kappa >= 0.4) —
+    the judge is trusted, so the cap still applies exactly as before."""
+    for i in range(25):
+        record_judgement(f"j{i}a", "review", "9", "approve")  # agree
+    for i in range(5):
+        record_judgement(f"j{i}b", "review", "3", "edit")  # agree
+
+    profile = _profile()
+    s = _clean_state(review_score=4)
+    pdf = ParsedPdf(recovered=14, expected=14, text="Built a python RAG pipeline.")
+    result = ats_score(s, pdf, profile)
+    assert "CAPPED" in result.report
+    assert result.total <= 94.0
 
 
 def test_pdf_parseability_recovers_expected_fields_from_a_real_render(tmp_path) -> None:

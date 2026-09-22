@@ -11,6 +11,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..config import settings
 from ..llm import invoke_structured, make_structured
+from ..preferences import load_preferences
 from ..profile import Profile
 from ..section_order import classify_role, section_order_for
 from ..state import Draft, JobState
@@ -78,6 +79,16 @@ def rewrite(state: JobState, verbose: bool = False) -> dict:
             "cache_control": {"type": "ephemeral"},  # end of the per-job-reusable prefix
         },
     ]
+    preferences = load_preferences()
+    if preferences:
+        # Per-job, not cache-breakpointed — it grows as more edits accumulate between
+        # any two jobs, so caching past this point would go stale. Placed after both
+        # existing breakpoints so it doesn't disturb them.
+        pref_lines = "\n".join(f"- {p}" for p in preferences)
+        content.append({
+            "type": "text",
+            "text": f"<user_preferences>\n{pref_lines}\n</user_preferences>",
+        })
     if state.validation_errors:
         content.append({
             "type": "text",

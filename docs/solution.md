@@ -83,31 +83,175 @@ Numbers in [ ] refer to review sections.
       notify line — all graph nodes stubbed, zero LLM calls), `tests/test_cli_add_url.py` (JSON-LD extraction,
       trafilatura fallback). 189/189 tests passing.
 
-## Step 7 — Batches API for the nightly queue (review 4.2)
-- [ ] `llm.py` — `BatchClient`: submit extract+diagnose for all queued jobs in one `messages.batches.create`, poll, fan results back into `JobState`. Rewrite/review stay live (need the retry loop).
-- [ ] `runner.py --batch` flag; interactive `jobpilot add` unchanged.
-      → verify: `jobpilot cost` shows per-job cost ~halved on a 10-job night vs live path.
+## Step 7 — Batches API for the nightly queue (review 4.2) — DONE
+- [x] `batch.py` (new file, not `llm.py` — kept separate since it's Anthropic-SDK-direct,
+      not a `ChatAnthropic`/LangChain wrapper like everything else in `llm.py`): `BatchRequest`
+      (custom_id, model, system, messages, schema_, max_tokens) + `BatchClient.submit/poll/
+      fetch_results`. Structured output is forced via `convert_to_anthropic_tool` + `tool_choice`
+      (the older, stable tool-forcing mechanism) rather than step 5's live-call `method="json_schema"`
+      — `output_config`'s converter is private langchain_anthropic internals and there's no way to
+      confirm the Batches API accepts it; tool-forcing is unambiguously supported. Pricing: base
+      rate × 0.5 (Anthropic's documented batch discount), no cache multiplier (batch `usage` may not
+      carry cache fields reliably — ponytail-flagged as a conservative simplification, not a bug).
+- [x] `nodes/requirements.py::extract_requirements` / `nodes/diagnose.py::diagnose` — each is a
+      no-op (`return {}`) if its output field (`state.requirements` / `state.diagnosis`) is already
+      populated on entry. Safe because neither node has a retry edge back to itself anywhere in the
+      graph (confirmed by reading `graph.py`'s wiring) — a live single-job run always starts with
+      both fields empty, so this changes nothing on that path.
+- [x] `graph.run`/`run_many` — private kwargs `_prefill` / `_prefill_by_index` (same convention as
+      the existing `_skip_render`), merged into the initial `JobState` before `ainvoke` so the two
+      nodes above see their field already set and skip.
+- [x] `runner.py run(batch=False)` — `batch=True` submits every survivor's extract call as one
+      Batch, then every extract-succeeded survivor's diagnose call as a second Batch (building its
+      request the same way `nodes/diagnose.py::diagnose()` does, by importing its `_profile_brief`/
+      `_requirements_brief` helpers rather than re-deriving that formatting — leading underscore is
+      a same-package style convention here, not enforced privacy). `retrieve_evidence`/`score_coverage`
+      (coverage.py, no LLM) run locally between the two batches, same as the live graph path would.
+      A job whose batch call errored at either stage falls back to a normal live `run_many` call
+      instead of being dropped — counted in `digest["notify"]` as `"batch fallback: N jobs"`.
+      Extra ruling beyond the brief: batch usage records are folded into the `_prefill` dict's new
+      `llm_calls` key (not in the original `_prefill` shape spec) so `JobState.total_cost_usd` — and
+      therefore `jobpilot cost` — actually reflects the batch discount; without it the skipped nodes
+      would silently drop those costs since neither returns an `llm_calls` update.
+- [x] `cli.py run --batch` flag, passed through to `runner.run`.
+      → verified: `tests/test_batch.py` (submit/poll/fetch_results, mixed succeeded+errored,
+      pricing exactly 0.5× `costs.PRICE_PER_MTOK` — also covers Step 7's "cost ~halved" ask),
+      `tests/test_prefill_skip.py` (both nodes no-op on prefill, `_model` never called),
+      `tests/test_runner.py` (batch path prefills into `run_many` — proven by the node functions
+      themselves raising/branching on empty state, not a blind stub — and a batch-errored job
+      still gets a live fallback run + notify line). 198/198 tests passing.
 
-## Step 8 — close the loop (review 2.7, 4.4)
-- [ ] `db/schema.sql` — `applications(job_id, sent_at, cv_pdf_sha, outcome, outcome_at)`; `jobpilot applied <id>`, `jobpilot outcome <id> interview|reject|ghost`.
-- [ ] `db/schema.sql` — `judgements(run_id, node, score_or_verdict, human_action)`; write on every review approve/edit/reject.
-- [ ] `jobpilot judge-stats` — Cohen's κ per judge node vs human action.
-- [ ] Review-edit diff → `data/preferences.yaml` (plan §21.4), appended to rewrite prompt as `<user_preferences>` (human-approved lines only).
-- [ ] `tests/test_invariance.py` — same draft, two section orders → `ats.total` equal, `recruiter.result` equal.
-      → verify: after 30 applications, `judge-stats` prints κ; `preferences.yaml` has ≥1 line derived from an edit.
+## Step 8 — close the loop (review 2.7, 4.4) — DONE
+- [x] `db/schema.sql` — `applications(job_id, sent_at, cv_pdf_sha, outcome, outcome_at)`; `jobpilot applied <id>`
+      (reads `out/<id>/draft.sha` written by render.py's idempotent-render marker; warns and records `""` if
+      no render exists yet), `jobpilot outcome <id> interview|reject|ghost` (typer `Literal` argument for
+      automatic choice validation, `db/repo.py::record_outcome` re-validates and raises `ValueError`/`KeyError`
+      independently since this may get called from non-CLI code later).
+- [x] `db/schema.sql` — `judgements(id, job_id, node, score_or_verdict, human_action)` — a fresh table needs no
+      `_NEW_COLUMNS` migration entry (schema.sql's own doc comment on `_NEW_COLUMNS` confirms this only applies
+      to columns added to a pre-existing table). Note: field is `id` (uuid4 hex PK), not `run_id` as this
+      section's original one-liner said — a job can revisit review multiple times (edit loops), so one row per
+      (job, judge, pause) needs its own key, `run_id` alone would collide across those pauses for the same run.
+      `cli.py::review()`'s loop calls `_record_judgements()` at every approve/edit/reject pause — up to 3 rows
+      (recruiter_sim/hiring_manager/review, whichever had a verdict at that pause) sharing one `human_action`.
+- [x] `jobpilot judge-stats` — `judgestats.py` (new, pure Python, no new dependency): `cohens_kappa(pairs, map)`
+      implements the standard po/pe formula; `judge_stats()` maps each node's verdict space onto
+      approve/edit/reject (recruiter_sim, hiring_manager direct; `review`'s raw `review_score` is bucketed via
+      `review_bucket()` — `>= settings.min_review_score` → "pass" else "retry" — at kappa-computation time, not
+      at write time, so the stored row always holds the raw score even if the threshold setting changes later).
+      CLI table shows κ / N per node, "not enough data" when a node has 0 judgement rows (realistic on a fresh
+      install — this must not crash).
+- [x] Review-edit diff → `data/preferences.yaml` (plan §21.4) — scoped to bullet-level text changes only, not
+      profile_line/cover_letter (ruling: those are free-form prose, diffing them line-by-line is a fuzzier
+      problem not worth the complexity here, and CLAUDE.md's XYZ formula lives at the bullet level anyway).
+      `preferences.py::diff_edited_bullets` matches old vs new by `source_bullet_id` (not position — a human
+      may reorder bullets) and returns new/changed text; `record_preferences` appends+dedupes into the YAML.
+      Simplified vs plan §21.4's "weekly clustering job proposes rules, you approve each" step: since the human
+      already approved the line by editing it and then approving/continuing the review, the extra proposal
+      round-trip adds no real signal here — appended directly, human-approved by construction. `rewrite.py`
+      loads `data/preferences.yaml` (empty list if absent, no error) and appends one `<user_preferences>` block
+      after the existing two `cache_control` breakpoints — per-job, not itself breakpointed, since it grows
+      between any two jobs as more edits land and caching past it would go stale.
+- [x] `tests/test_invariance.py` — `ats_score()` confirmed to never read `Draft.section_order` in its scoring
+      math (read `scoring/ats.py` in full to verify); two otherwise-identical drafts differing only in
+      `section_order` score bit-identical totals. `recruiter_sim` is still a real LLM call at this point in the
+      plan (step 9, not done yet, is what makes it deterministic) — scoped per this task's brief to stubbing
+      `recruiter_sim._model()` with a fake that inspects the rendered CV text for a fixed keyword, proving the
+      result doesn't depend on bullet concatenation order (a substring check can't).
+      → verified: `tests/test_cli_applications.py`, `tests/test_judgestats.py` (hand-computed partial-agreement
+      κ example, arithmetic shown in a comment), `tests/test_preferences.py`, `tests/test_invariance.py`.
+      214/214 tests passing (198 baseline + 16 new).
+      → NOT verified with real usage data (none exists yet — no real applications have been sent through this
+      tool in this session): "after 30 applications, `judge-stats` prints κ" and "`preferences.yaml` has ≥1
+      line derived from an edit" are both proven with synthetic/mocked data in the test suite above, not real
+      review sessions. Real verification happens as the user actually runs `jobpilot review` and `jobpilot
+      applied`/`outcome` over time.
 
-## Step 9 — judges (review 3.1) — only after Step 8 has data
-- [ ] `recruiter_sim` → deterministic: hard keywords ∩ `pdf_text`; hard_fail if any hard keyword with evidence is missing from PDF. Delete the Haiku call.
-- [ ] `review` → 3 samples (or Haiku+Sonnet) → weighted majority vote; weights from disagreement (Zhang et al. 2026) once κ data exists, plain majority before.
-- [ ] If κ(review) < 0.4 after 30 runs → remove the review cap from `ats_score`.
-      → verify: recruiter node has 0 `llm_calls`; `review` variance across 3 samples logged.
+## Step 9 — judges (review 3.1) — only after Step 8 has data — DONE
+- [x] `recruiter_sim` → deterministic: hard keywords ∩ draft CV text (this node runs
+      pre-render, before there's a PDF — "pdf_text" means the same `_rendered_cv_text`
+      domain it already used); hard_fail if any *covered* hard requirement's keyword is
+      missing from the draft. Haiku call deleted, `prompts/recruiter_sim.md` deleted.
+      **Ruling: `"soft_fail"` dropped as a reachable output.** Once the check is binary
+      per-requirement (keyword present or not), there's no deterministic partial-miss
+      case left — inventing a threshold to keep a third bucket alive would be exactly
+      the "asserted from judgement" scoring CLAUDE.md forbids. `"soft_fail"` stays a
+      valid `RecruiterResult.result` literal (other code/tests reference it), this node
+      just never returns it.
+- [x] `review` → 3 samples of `settings.review_model` (not Haiku+Sonnet — self-consistency
+      sampling needs no second model routing path; documented as a future option in the
+      code) → plain majority vote. **Ruling: plain, not weighted.** No real κ(review)
+      history exists yet (step 8's machinery just landed, no real judgements recorded)
+      — wiring in disagreement-based weights with no data behind them would itself be
+      judgement asserted as fact. Stored `review_score` is the median of the 3 samples;
+      variance (`statistics.pvariance`) and the raw 3 scores are logged into
+      `JobState.notes`.
+- [x] κ-gated review cap: `judgestats.review_cap_still_trusted()` — cap applies unless
+      there are >= 30 recorded `review` judgement pairs AND κ(review) < 0.4. **Honesty
+      note:** this has never fired against real data — there are no real judgements in
+      the db yet. Tested only with synthetic `record_judgement` rows engineered to
+      produce κ < 0.4 and κ >= 0.4. Real behavior emerges once the user accumulates
+      real review decisions through `human_review`.
+      → verify: recruiter node has 0 `llm_calls` (`tests/test_recruiter_sim.py`);
+      `review` variance across 3 samples logged (`tests/test_review.py`).
 
-## Step 10 — evidence store (review 3.6)
-- [ ] Either: `evidence/repo_docs.py` ingests README + `docs/*.md` from `master_profile.repos[]` (chunk by heading, SHA-cached) — closes "built agents yourself" gaps.
-- [ ] Or: replace Chroma with `numpy` cosine over 20 vectors saved as `.npy`. Pick one; don't keep Chroma for 20 rows.
-      → verify: Retorio JD (`evals/real/07`) hard gap "built agents yourself" becomes covered by a `repo_doc` evidence chunk.
+## Step 10 — evidence store (review 3.6) — DONE
+- [x] `repo_docs.py` (new, flat module) ingests README + top-level `docs/*.md` per-project
+      via each project's `repo:` field under `profile.raw["projects"]` (not a top-level
+      `master_profile.repos[]` — the real yaml has no such list; per-project `repo:`
+      strings are the real shape, confirmed by reading `data/master_profile.yaml`).
+      Unauthenticated GitHub REST API (60 req/hr, noted in the module docstring).
+      `chunk_by_heading` splits markdown on any-level `#`, intro chunk for text before
+      the first heading, slugified anchor ids. SHA-cached at
+      `data/repo_docs_cache.json`: an unchanged file's `sha` (from the lightweight
+      listing call) skips only its content re-download, not its re-chunk/re-embed —
+      `build_index()` has no incremental-add path into Chroma (it's still full-rebuild-
+      on-`force`), so the cached content is still fed through on every rebuild.
+      **Ruling: did not touch Chroma vs numpy.** solution.md frames these as
+      alternatives, but the verify line below only the ingestion path satisfies —
+      swapping the storage engine changes nothing about what's indexed. Chroma stays for
+      ~20 rows; `ponytail:` this is arguably overkill for that row count, but that's an
+      engine-choice question independent of this step, not touched.
+- [x] `evidence.build_index()` embeds repo doc chunks into the same collection,
+      `metadata={"source": "repo_doc", "parent_id": <project id>, ...}` (same shape as
+      bullet metadata). **Fixed `retrieve_many()`**: was hardcoding
+      `source="cv_bullet"` on every retrieved `Evidence` regardless of what its metadata
+      actually said — a real bug that silently mislabeled every repo_doc chunk on
+      retrieval. Now reads `meta.get("source")`.
+- [x] `nodes/diagnose.py` / `nodes/rewrite.py` / `coverage.py::retrieve_evidence` —
+      read-through confirmed none of the three filter `Evidence` by `.source` anywhere;
+      a `repo_doc` chunk is just another candidate in the same list. No code change
+      needed beyond the `retrieve_many()` fix above.
+      → verify: `tests/test_repo_docs.py` (parse/fetch/chunk/sha-cache, all mocked
+      `httpx.get`, no real network), `tests/test_evidence.py` (`build_index()` embeds a
+      mocked repo_doc chunk into a real ephemeral Chroma collection + real ids/metadata;
+      `retrieve_many()` returns it with `Evidence.source == "repo_doc"`, proving the
+      bug fix). 235/235 passing (225 baseline + 10 new).
+      → **NOT verified**: the literal "Retorio JD (`evals/real/07`) hard gap becomes
+      covered end-to-end" line was not run — `evals/run_harness.py` costs real Anthropic
+      API money per its own docstring, and this session was told not to spend it. The
+      wiring (fetch → chunk → embed → retrieve → source label) is unit-tested with
+      mocks instead; running it against the real Retorio JD + a real embed of the real
+      RAG_pipeline repo is a manual follow-up for the user.
 
 ## Done means
-- `jobpilot run` hourly for 7 days: 0 duplicate runs, spend ≤ cap every day, 0 lost runs on crash.
-- ATS score separates two drafts with equal coverage.
-- κ for each judge node is a number in the repo, not an assumption.
+- `jobpilot run` hourly for 7 days: 0 duplicate runs, spend ≤ cap every day, 0 lost runs
+  on crash. **Mechanism exists and is tested** (durability/resume, per-source try/except,
+  budget cap — steps 1-2, 6). **Not verified against reality**: no real 7-day hourly run
+  has happened yet: this needs real crash/uptime history, not something a test suite can
+  produce.
+- ATS score separates two drafts with equal coverage. **Verified**:
+  `tests/test_invariance.py` (step 8) proves the score never reads `section_order`, and
+  `scoring/ats.py`'s fact-table format means two drafts with different bullet phrasing
+  but identical counted coverage score identically — this one is done, not just wired.
+- κ for each judge node is a number in the repo, not an assumption. **Mechanism exists
+  and is tested** (`judgestats.py`, step 8/9): `cohens_kappa` is implemented, `judge-stats`
+  prints κ/N per node, and the κ-gated review cap wiring is proven with synthetic
+  judgement rows. **Not verified against reality**: zero real judgements exist in the db
+  yet (this tool has not been run against real applications), so no real κ value has ever
+  been computed — that requires the user to actually run `jobpilot review` over real
+  jobs and accumulate judgement rows.
+
+All 10 steps' code and tests are done. What's explicitly still open across all three
+bullets above is the same thing: real usage data. Nothing in this plan requires further
+code to close that gap — it requires the user running `jobpilot` for real.

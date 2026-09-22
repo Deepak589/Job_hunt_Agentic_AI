@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import statistics
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -32,6 +33,20 @@ def _model():
 
 
 def review(state: JobState, verbose: bool = False) -> dict:
+    """3-sample ensemble, plain majority vote (solution.md step 9).
+
+    Ruling: 3 independent samples of the same `settings.review_model` rather than a
+    Haiku+Sonnet ensemble — this is self-consistency sampling, not model diversity, and
+    doesn't need a second model routing path. (A Haiku+Sonnet ensemble is a documented
+    future option, not built now.)
+
+    Ruling: plain (unweighted) majority vote. solution.md floats weighting votes by
+    judge/human disagreement once κ(review) data exists — it doesn't yet (step 8 just
+    landed the machinery; no real judgements recorded). Wiring in fabricated weights
+    with no data behind them is exactly the "asserted from judgement" scoring this
+    project's CLAUDE.md forbids. Future implementer: plug real weights in here, at the
+    vote-counting step, once `judgestats.judge_stats()["review"]` has real history.
+    """
     assert state.draft is not None, "review requires rewrite to have run first"
     human = (
         f"<job_description>\n{state.job.jd_text.strip()}\n</job_description>\n\n"
@@ -39,19 +54,35 @@ def review(state: JobState, verbose: bool = False) -> dict:
     )
     messages = [("system", _prompt()), ("human", human)]
 
-    verdict, usage = invoke_structured(_model(), messages, model=settings.review_model, node="review", verbose=verbose)
-    scores = state.scores.model_copy(update={"review_score": verdict.score})
-    note = f"review: {verdict.score}/10"
-    if verdict.weaknesses:
-        note += " — " + "; ".join(verdict.weaknesses)
-    # Only feed weaknesses back into validation_errors when review_gate will
-    # actually retry — otherwise a proceed-path draft with minor noted
-    # weaknesses would wrongly trip score_ats's no_fabrication gate, which
-    # reads validation_errors as "did fact-checking fail".
-    will_retry = verdict.score < settings.min_review_score and state.attempt_count < settings.max_rewrite_attempts
+    results = []
+    usage = []
+    for _ in range(3):
+        verdict, sample_usage = invoke_structured(_model(), messages, model=settings.review_model, node="review", verbose=verbose)
+        results.append(verdict)
+        usage.extend(sample_usage)
+
+    scores_list = [r.score for r in results]
+    pass_votes = sum(1 for s in scores_list if s >= settings.min_review_score)
+    majority_pass = pass_votes >= 2
+    median_score = statistics.median(scores_list)
+    variance = statistics.pvariance(scores_list)
+
+    scores = state.scores.model_copy(update={"review_score": median_score})
+    note = f"review: samples={scores_list} median={median_score} variance={variance:.2f} votes={pass_votes}/3"
+
+    # Union (deduped, first-seen order) of weaknesses from every sample that voted
+    # retry — mirrors the single-sample logic this replaces.
+    weaknesses: list[str] = []
+    for r in results:
+        if r.score < settings.min_review_score:
+            for w in r.weaknesses:
+                if w not in weaknesses:
+                    weaknesses.append(w)
+
+    will_retry = not majority_pass and state.attempt_count < settings.max_rewrite_attempts
     return {
         "scores": scores,
-        "validation_errors": verdict.weaknesses if will_retry else [],
+        "validation_errors": weaknesses if will_retry else [],
         "notes": [note],
         "llm_calls": usage,
     }
