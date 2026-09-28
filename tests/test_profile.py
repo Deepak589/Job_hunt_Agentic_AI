@@ -23,9 +23,9 @@ def profile() -> Profile:
 
 def test_profile_counts(profile: Profile) -> None:
     """Guards against a silent yaml truncation or a mis-parsed section."""
-    assert len(profile.skills) == 61
-    assert len(profile.bullet_ids) == 20
-    assert len(profile.tags()) == 102
+    assert len(profile.skills) == 63
+    assert len(profile.bullet_ids) == 21
+    assert len(profile.tags()) == 107
     assert len(profile.bullets) == len(profile.bullet_ids), "duplicate bullet ids"
 
 

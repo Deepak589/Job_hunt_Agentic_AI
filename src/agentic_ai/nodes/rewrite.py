@@ -14,7 +14,7 @@ from ..llm import invoke_structured, make_structured
 from ..preferences import load_preferences
 from ..profile import Profile
 from ..section_order import classify_role, section_order_for
-from ..state import Draft, JobState
+from ..state import Draft, DraftBullet, JobState
 
 
 @functools.lru_cache(maxsize=1)
@@ -38,6 +38,24 @@ def _profile_bullets_json(profile: Profile) -> str:
         ],
         indent=2,
     )
+
+
+def _capped_bullets(bullets: dict[str, list[DraftBullet]]) -> dict[str, list[DraftBullet]]:
+    """Structural overflow guard: cap bullets/section and chars/bullet so a draft can't
+    blow past the one-page template regardless of what the model generates. Never
+    truncates a bullet if doing so would cut off its own `metric` — validate_facts checks
+    that metric appears verbatim in `text`, so a truncation-induced mismatch would fail a
+    draft the fact-checker should have passed."""
+    capped: dict[str, list[DraftBullet]] = {}
+    for section, items in bullets.items():
+        kept = []
+        for b in items[: settings.max_bullets_per_section]:
+            text = b.text
+            if len(text) > settings.max_bullet_chars and (not b.metric or b.metric in text[: settings.max_bullet_chars]):
+                text = text[: settings.max_bullet_chars].rsplit(" ", 1)[0].rstrip(" .,;:") + "."
+            kept.append(b if text == b.text else b.model_copy(update={"text": text}))
+        capped[section] = kept
+    return capped
 
 
 def rewrite(state: JobState, verbose: bool = False) -> dict:
@@ -100,7 +118,7 @@ def rewrite(state: JobState, verbose: bool = False) -> dict:
     ]
 
     parsed, usage = invoke_structured(_model(), messages, model=settings.rewrite_model, node="rewrite", verbose=verbose)
-    draft = parsed.model_copy(update={"section_order": order})
+    draft = parsed.model_copy(update={"section_order": order, "bullets": _capped_bullets(parsed.bullets)})
     return {
         "draft": draft,
         "attempt_count": state.attempt_count + 1,

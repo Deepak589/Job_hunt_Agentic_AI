@@ -22,6 +22,7 @@ class ParsedPdf(BaseModel):
     recovered: int
     expected: int
     text: str = ""  # extracted PDF text, lowercased-compared against evidenced JD terms
+    page_count: int = 1  # overflow onto page 2 is the actual render failure mode (not a guess)
 
 
 def gates_failed(state: JobState) -> dict[str, bool]:
@@ -52,7 +53,8 @@ def _frac(numerator: int, denominator: int) -> float:
 def parse_pdf(pdf_path: Path, profile: Profile) -> ParsedPdf:
     """Re-extract text from the RENDERED pdf and check what survives — the actual
     failure mode that loses interviews, not a guess about whether Typst rendered ok."""
-    text = "\n".join(page.extract_text() or "" for page in PdfReader(str(pdf_path)).pages)
+    pages = PdfReader(str(pdf_path)).pages
+    text = "\n".join(page.extract_text() or "" for page in pages)
     identity = profile.raw["identity"]
     expected_fields = {
         "name": identity["name"].split()[0],
@@ -67,11 +69,16 @@ def parse_pdf(pdf_path: Path, profile: Profile) -> ParsedPdf:
             expected += 1
             if s["name"].lower() in text.lower():
                 recovered += 1
-    return ParsedPdf(recovered=recovered, expected=expected, text=text)
+    return ParsedPdf(recovered=recovered, expected=expected, text=text, page_count=len(pages))
 
 
 def ats_score(state: JobState, pdf: ParsedPdf, profile: Profile) -> AtsScore:
     failed = gates_failed(state)
+    if pdf.page_count > 1:
+        # Overflow is a rendered-fact, not a guess — caught after render, same as
+        # parse_pdf's field-recovery check. A zero here is a hard block, not a
+        # deduction: an overflowed CV isn't the one that gets read past page 1.
+        failed = {**failed, "single_page": False}
     hard = [r for r in state.requirements if r.type == "hard"]
     hard_covered = sum(r.covered for r in hard)
 
@@ -116,7 +123,7 @@ def ats_score(state: JobState, pdf: ParsedPdf, profile: Profile) -> AtsScore:
 
     gate_lines = "\n".join(
         f"  {name.replace('_', ' ')} {'.' * (18 - len(name))} {'0 ✓' if name not in failed else 'FAILED'}"
-        for name in ("no_fabrication", "no_disqualifiers")
+        for name in ("no_fabrication", "no_disqualifiers", "single_page")
     )
     point_lines = "\n".join(f"  {name} {'.' * (16 - len(name))} {pts:5.1f}" for name, pts in components.items())
     cap_line = (
@@ -133,7 +140,11 @@ def ats_score(state: JobState, pdf: ParsedPdf, profile: Profile) -> AtsScore:
 
     return AtsScore(
         total=total, verdict=verdict,
-        gates={"no_fabrication": "no_fabrication" not in failed, "no_disqualifiers": "no_disqualifiers" not in failed},
+        gates={
+            "no_fabrication": "no_fabrication" not in failed,
+            "no_disqualifiers": "no_disqualifiers" not in failed,
+            "single_page": "single_page" not in failed,
+        },
         components=components, report=report,
     )
 

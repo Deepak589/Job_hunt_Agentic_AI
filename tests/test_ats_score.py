@@ -64,6 +64,16 @@ def test_gates_fail_on_unmet_disqualifier() -> None:
     assert failed.get("no_disqualifiers") is False
 
 
+def test_multi_page_pdf_zeroes_the_total_via_single_page_gate() -> None:
+    profile = _profile()
+    s = _clean_state()
+    pdf = ParsedPdf(recovered=14, expected=14, page_count=2)
+    result = ats_score(s, pdf, profile)
+    assert result.total == 0.0
+    assert result.verdict == "skip"
+    assert result.gates["single_page"] is False
+
+
 def test_a_failed_gate_zeroes_the_total_regardless_of_points() -> None:
     profile = _profile()
     s = _clean_state().model_copy(update={"validation_errors": ["bad number"]})
@@ -80,7 +90,7 @@ def test_clean_high_coverage_state_scores_high_and_reports_counts() -> None:
     result = ats_score(s, pdf, profile)
     assert result.total > 0
     assert "hard req coverage" in result.report
-    assert result.gates == {"no_fabrication": True, "no_disqualifiers": True}
+    assert result.gates == {"no_fabrication": True, "no_disqualifiers": True, "single_page": True}
 
 
 def test_literal_keywords_component_separates_drafts_with_equal_coverage() -> None:

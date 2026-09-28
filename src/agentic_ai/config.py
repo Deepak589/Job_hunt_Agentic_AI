@@ -82,6 +82,12 @@ class Settings(BaseSettings):
     max_rewrite_attempts: int = 2
     min_review_score: int = 7  # below this, retry rewrite (if attempts remain)
 
+    # --- render overflow guard --- enforced structurally in rewrite() so a draft can't
+    # overflow the one-page template in the first place, cheaper than detecting it after
+    # render (ats.py's page_count gate is the belt-and-suspenders backstop for this).
+    max_bullets_per_section: int = 5
+    max_bullet_chars: int = 220
+
     # --- tracing (optional) ---
     # Unset by default -> tracing is a no-op. Set all three to enable Langfuse.
     langfuse_public_key: str | None = None
