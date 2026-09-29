@@ -77,8 +77,11 @@ def diagnose(state: JobState, verbose: bool = False) -> dict:
             "text": f"<extracted_requirements>\n{_requirements_brief(state)}\n</extracted_requirements>",
         },
     ]
+    # System block also needs ttl="1h": Anthropic requires cache_control ttls to be
+    # non-increasing across tools -> system -> messages, and the profile block above
+    # is already 1h, so a default-5m system block here would come "after" it and 400.
     messages = [
-        SystemMessage(content=[{"type": "text", "text": _prompt(), "cache_control": {"type": "ephemeral"}}]),
+        SystemMessage(content=[{"type": "text", "text": _prompt(), "cache_control": {"type": "ephemeral", "ttl": "1h"}}]),
         HumanMessage(content=content),
     ]
 

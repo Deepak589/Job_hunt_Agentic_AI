@@ -104,6 +104,17 @@ def already_processed(job_id: str, content_hash: str, db_path: Path | None = Non
     return row is not None
 
 
+def get_job(job_id: str, db_path: Path | None = None) -> dict | None:
+    """Fetch a job's stored fields by id — used to resolve its human-readable output
+    folder (render.py's job_dir_name) without re-deriving the slug from scratch."""
+    path = db_path or settings.jobs_db_path
+    init_db(path)
+    with sqlite3.connect(path) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    return dict(row) if row else None
+
+
 def get_company_snapshot(company: str, ats: str, db_path: Path | None = None) -> dict | None:
     """Last successful fetch's posting ids + failure streak for (company, ats). None if
     this company/ats pair has never been polled."""

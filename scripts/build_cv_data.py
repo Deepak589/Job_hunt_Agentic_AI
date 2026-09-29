@@ -7,12 +7,20 @@ cv_data.json is never hand-edited. Bullets are a plain concatenation of outcome 
 metric / method - no invented phrasing, nothing that isn't already in the yaml.
 
 Usage:  python3 scripts/build_cv_data.py   # overwrites data/cv_data.json
+
+Recruiters want short and impactful, not exhaustive - so this caps each entry to its
+first MAX_BULLETS bullets (yaml order) and each project's meta line to its first
+MAX_STACK_ITEMS stack entries. Nothing is reworded, just trimmed to what already fits
+a one-page CV; the full detail stays in the yaml for tailored per-job renders.
 """
 from __future__ import annotations
 
 import json
 import pathlib
 import sys
+
+MAX_BULLETS = 3
+MAX_STACK_ITEMS = 5
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
@@ -54,7 +62,7 @@ def _org_line(entry: dict) -> str:
 
 
 def _project_meta(entry: dict) -> str:
-    parts = list(entry.get("stack", []))
+    parts = list(entry.get("stack", []))[:MAX_STACK_ITEMS]
     if entry.get("live_url"):
         parts.append("live at " + entry["live_url"].replace("https://", "").replace("http://", ""))
     parts.append(entry["repo"])
@@ -77,9 +85,15 @@ def build(profile: Profile) -> dict:
         {
             "title": entry["name"],
             "meta": _project_meta(entry),
-            "bullets": [
-                _bullet_sentence(b) for b in entry["bullets"] if b.get("status") != "not_shipped"
-            ],
+            "bullets": (
+                [entry["cv_summary"].strip()]
+                if entry.get("cv_summary")
+                else [
+                    _bullet_sentence(b)
+                    for b in entry["bullets"]
+                    if b.get("status") != "not_shipped"
+                ][:MAX_BULLETS]
+            ),
         }
         for entry in raw["projects"]
     ]
@@ -90,7 +104,7 @@ def build(profile: Profile) -> dict:
             "dates": f"{_fmt_month(entry['start'])} – {_fmt_month(entry['end'])}",
             "bullets": [
                 _bullet_sentence(b) for b in entry["bullets"] if b.get("status") != "not_shipped"
-            ],
+            ][:MAX_BULLETS],
         }
         for entry in raw["experience"]
     ]

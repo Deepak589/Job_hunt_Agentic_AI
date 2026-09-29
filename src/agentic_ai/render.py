@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +23,22 @@ from .profile import Profile
 from .state import Draft, Job, JobState
 
 OUT_DIR = ROOT / "out"
+
+
+def _slugify(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "job"
+
+
+def job_dir_name(company: str, title: str, job_id: str) -> str:
+    """Human-readable output folder name — company-title-<first 8 hex of job.id>.
+
+    job.id itself stays the checkpointer thread_id / DB key / dedupe key untouched;
+    this is purely the on-disk folder name, derived deterministically so a lookup by
+    job_id (e.g. the `applied` CLI command) can recompute it without storing it twice.
+    The short id suffix guards against two postings slugifying to the same name.
+    """
+    slug = _slugify(f"{company}-{title}")[:60]
+    return f"{slug}-{job_id[:8]}"
 
 
 def _fmt_month(ym: str | None) -> str:
@@ -115,8 +132,9 @@ def _draft_hash(draft: Draft) -> str:
 def render_documents(state: JobState) -> dict:
     assert state.draft is not None, "render_documents requires a clean draft"
     profile = Profile.load()
-    job_dir = OUT_DIR / state.job.id
+    job_dir = OUT_DIR / job_dir_name(state.job.company, state.job.title, state.job.id)
     job_dir.mkdir(parents=True, exist_ok=True)
+    (job_dir / "jd.txt").write_text(state.job.jd_text)
 
     cv_pdf = job_dir / "cv.pdf"
     letter_pdf = job_dir / "cover_letter.pdf"

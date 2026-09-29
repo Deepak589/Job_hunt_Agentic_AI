@@ -377,11 +377,15 @@ def resume(job_id: str) -> None:
 @app.command()
 def applied(job_id: str) -> None:
     """Record that job_id's tailored CV was sent. Reads the rendered draft's hash from
-    out/<id>/draft.sha (render.py's idempotent-render marker, solution.md step 2)."""
-    from .db.repo import record_application
-    from .render import OUT_DIR
+    out/<company-title-slug>/draft.sha (render.py's idempotent-render marker, solution.md
+    step 2) — the folder name is recomputed from the stored job, not job_id itself."""
+    from .db.repo import get_job, record_application
+    from .render import OUT_DIR, job_dir_name
 
-    sha_path = OUT_DIR / job_id / "draft.sha"
+    job = get_job(job_id)
+    if job is None:
+        raise typer.BadParameter(f"no job found for id {job_id}")
+    sha_path = OUT_DIR / job_dir_name(job["company"], job["title"], job["id"]) / "draft.sha"
     if sha_path.exists():
         cv_pdf_sha = sha_path.read_text().strip()
     else:
@@ -619,6 +623,34 @@ def index_calibrate() -> None:
 
 
 # ----------------------------------------------------------------------- profile
+
+
+@profile_app.command("init")
+def profile_init(
+    cv: Path = typer.Option(..., "--cv", help="Path to your CV (PDF)."),
+    force: bool = typer.Option(False, "--force", help="Overwrite an existing master_profile.yaml."),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+) -> None:
+    """First-time setup: LLM-extract data/master_profile.yaml from a CV PDF, then
+    render it straight back to a CV so you have something concrete to review."""
+    from .cv_extract import init_profile_from_cv
+
+    if settings.profile_path.exists() and not force:
+        console.print(
+            f"[yellow]{settings.profile_path} already exists.[/yellow] "
+            "Pass --force to overwrite, or use 'jobpilot cv sync' to update it instead."
+        )
+        raise typer.Exit(1)
+
+    _check_budget()
+    summary = init_profile_from_cv(cv, verbose=verbose)
+    console.print(f"[bold green]done[/bold green] — {summary}")
+    console.print(
+        "\n[bold]Review main_cv_v2.pdf.[/bold] Anything wrong (missing skill, off number, "
+        "wrong company), tell me directly — that's a normal yaml edit, same as any other "
+        "correction. Also fill in the constraints block (work_status, available_from, "
+        "relocation) by hand — those aren't usually on a CV."
+    )
 
 
 @profile_app.command("check")

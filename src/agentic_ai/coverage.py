@@ -54,9 +54,15 @@ def _eligibility_terms(raw: dict, full_time: bool = False) -> set[str]:
     for edu in raw.get("education", []):
         degree = str(edu.get("degree", ""))
         terms.add(degree)
-        # "MSc Data Science" -> "data science"; "BTech — Computer Science & Engineering"
-        # -> "computer science & engineering", "computer science"
-        field = re.sub(r"^\s*(msc|m\.sc\.|ma|bsc|btech|b\.tech|ba|bachelor|master)\b[\s—–-]*", "", degree, flags=re.I)
+        # "MSc Data Science" -> "data science"; "BTech in Computer Science & Engineering"
+        # -> "computer science & engineering", "computer science" (the trailing "in|of"
+        # must also be stripped, or "BTech in X" leaves "in x" and never matches "x" alone)
+        field = re.sub(
+            r"^\s*(msc|m\.sc\.|ma|bsc|btech|b\.tech|ba|bachelor|master)\b[\s—–-]*(in|of)?\s*",
+            "",
+            degree,
+            flags=re.I,
+        )
         terms.add(field)
         terms.add(field.split("&")[0])
 
@@ -219,6 +225,9 @@ ONSITE_PATTERNS = (
     # same way would have skipped too.
     r"(able|ability|possibility) to work (regularly |on a regular basis )?(in|at|from)",
     r"regelmäßig (in|vor)|wohnort|willing to commute|live (in|near)",
+    # The extractor's own paraphrase of rule 7 ("a statement about where the work
+    # happens") often comes back this plainly, with no on-site/based-in wording at all.
+    r"work location|office location",
 )
 
 

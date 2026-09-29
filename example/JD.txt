@@ -1,0 +1,54 @@
+jd: About the job
+We help the world run better
+
+At SAP, we keep it simple: you bring your best to us, and we'll bring out the best in you. We're builders touching over 20 industries and 80% of global commerce, and we need your unique talents to help shape what's next. The work is challenging – but it matters. You'll find a place where you can be yourself, prioritize your wellbeing, and truly belong. What's in it for you? Constant learning, skill growth, great benefits, and a team that wants you to grow and succeed.
+
+What You'll Build
+
+You will contribute to expanding AI features of SAP BTP Kyma runtime, that means developing multi-agent systems, new skills and tools for agents. All to ease and automate the work of engineers working with SAP BTP Kyma runtime.
+
+Your Daily Tasks Will Include
+
+* Working on large-scale distributed systems in technologies including Kyma (Kubernetes runtime), AI libraries and frameworks like LangGraph, LangChain, LangFuse, etc.
+* Developing new AI features, maintaining and improving live AI products and tools for SAP BTP Kyma Runtime
+* Working on all aspects of software lifecycle: CI/CD pipelines, automation, testing, releases, etc.
+
+What You Bring
+
+* You have a good grasp of AI concepts such as: agent skills and tools, MCP, A2A, prompt techniques, context-injection, RAG, etc.
+* You experimented, worked, or have personal projects employing multi-agent or generative AI frameworks, e.g., LangChain, CrewAI
+* You experimented with running different local LLMs, open-source coding harnesses, your own RAG system or similar
+* You have experience with Python (REST APIs, FastAPI etc), K3D/S, and understand engineering practices
+* You are familiar with orchestration tools: Kubernetes, GitHub Actions
+* You adapt quickly to changing technologies, frameworks and communicate clearly
+* Ability to work from our Garching bei München office once a week
+
+Where you belong
+
+We are SAP Business Technology Platform (BTP) Core team, the heart of SAP’s cloud offering. We build fully distributed, highly scalable, microservices-based architecture leveraging standard OSS Cloud Native Foundation technologies. We offer our customers a modern way to extend and integrate their applications with the cloud-native world. We form the foundation for all extensions and integrations of all SAP systems. We value the entrepreneurial spirit, fostering creativity, and building lasting relationships with our colleagues and the community. Within our team, we practice a trust-based working model. You can experience all of that under our open source project Kyma (https://kyma-project.io/[)](https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fkyma-project%2Eio%2F%29&urlhash=8Z-U&mt=S0E4Y5Qm7fGDhXYEvP58oamwBidxBAZwUCfik6GzyZbUi71VlqiDB1SUfowvZIYJct-gSp2ADqgEEOq1XXG2yAyWL_I&isSdui=true).
+
+Your set of application documents should contain a cover letter, a resume in table form, school leaving certificates, certificate of enrollment, current university transcript of records, copies of any academic degrees already earned, and if available, references from former employers (including internships). Please also describe your experience and skills in foreign languages and computer programs / programming languages.
+
+This is a SAP global, strategic, paid working student position that provides students with opportunities to find purpose in their careers.
+
+#Workingstudent #Werkstudent #Germany #Deutschland #Student #SAPGermanStudentsCareers #SAPNextGen
+
+Bring out your best
+
+SAP innovations help more than four hundred thousand customers worldwide work together more efficiently and use business insight more effectively. Originally known for leadership in enterprise resource planning (ERP) software, SAP has evolved to become a market leader in end-to-end business application software and related services for database, analytics, intelligent technologies, and experience management. As a cloud company with two hundred million users and more than one hundred thousand employees worldwide, we are purpose-driven and future-focused, with a highly collaborative team ethic and commitment to personal development. Whether connecting global industries, people, or platforms, we help ensure every challenge gets the solution it deserves. At SAP, you can bring out your best.
+
+We win with inclusion
+
+SAP’s culture of inclusion, focus on health and well-being, and flexible working models help ensure that everyone – regardless of background – feels included and can run at their best. At SAP, we believe we are made stronger by the unique capabilities and qualities that each person brings to our company, and we invest in our employees to inspire confidence and help everyone realize their full potential. We ultimately believe in unleashing all talent and creating a better world.
+
+SAP is committed to the values of Equal Employment Opportunity and provides accessibility accommodations to applicants with physical and/or mental disabilities. If you are interested in applying for employment with SAP and are in need of accommodation or special assistance to navigate our website or to complete your application, please send an e-mail with your request to Recruiting Operations Team: Careers@sap.com.
+
+For SAP employees: Only permanent roles are eligible for the[SAP Employee Referral Program](https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fone%2Eint%2Esap%2Fme%40sap%2Fjobs_and_hiring%2Femployee_referral%2Fregion%2F0000%2Flang%2Fen&urlhash=pazL&mt=1-U2hR3PCgnK1nKi6mwnLaDX6Trk60MxZ1ahsxnSsvNWxgQauJX_kKMRLmoxqI1-3qEiZ2CkCkefV0IcumTqxXSlfl4&isSdui=true), according to the eligibility rules set in the SAP Referral Policy. Specific conditions may apply for roles in Vocational Training.
+
+AI Usage in the Recruitment Process
+
+For information on the responsible use of AI in our recruitment process, please refer to our[Guidelines for Ethical Usage of AI in the Recruiting Process](https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fjobs%2Esap%2Ecom%2Fcontent%2FEthical_usage_of_AI_in_the_recruiting_process%2F%3Flocale%3Den_US&urlhash=CO3-&mt=AN0CVQ5PRA28ocCkdy8Ovi3ctLhyvCyUgqOrTvq85cOggEa7Tzl4pY3TGeH2qODraPP1DEZ5jBQOI2vPN2mVIjnuWaM&isSdui=true).
+
+Please note that any violation of these guidelines may result in disqualification from the hiring process.
+
+Requisition ID: 460093 | Work Area: Software-Design and Development | Expected Travel: 0 - 10% | Career Status: Student | Employment Type: Limited Part Time | Additional Locations:

@@ -51,6 +51,13 @@ posting demands, nothing else.
 9. An option is not a requirement. "or keen to start", "or you are close enough that you
     will get there fast", "or willing to learn" makes the clause soft — the JD has said the
     skill itself is not the bar.
+10. An eligibility disqualifier (enrollment status, degree field, work authorization,
+    language fluency) still needs `keywords` — never leave it empty. For "Enrolled student
+    in Computer Science, Data Science, or a related field", emit
+    `["enrolled", "student", "computer science", "data science"]`. These match against
+    facts the candidate's own profile states (education, work status), not against a CV
+    bullet, so skipping the keyword here silently drops the only way that fact can clear
+    the gate.
 
 ## Output
 

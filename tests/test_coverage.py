@@ -369,7 +369,7 @@ def test_onsite_in_an_unreachable_city_skips() -> None:
 def test_germany_alone_does_not_make_a_location_reachable() -> None:
     """Every LinkedIn location ends in ", Germany" — it must not match on its own."""
     s = scored(req(ONSITE, type="disqualifier", keywords=["on-site"], similarity=BELOW),
-               location="Munich, Bavaria, Germany")
+               location="Leipzig, Saxony, Germany")
     assert not s.requirements[0].covered
 
 

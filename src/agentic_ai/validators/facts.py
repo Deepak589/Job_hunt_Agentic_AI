@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import re
 
-from ..coverage import FLUENT_LEVELS, _normalize
+from ..coverage import FLUENT_LEVELS, _eligibility_terms, _normalize, location_terms
 from ..profile import NUMERIC_RE, Profile
 from ..state import Draft
 
@@ -118,6 +118,13 @@ def validate_facts(draft: Draft, profile: Profile, jd_keywords: list[str] = ()) 
     allowed_tech = {_normalize(t) for t in profile.all_tech() | profile.all_stack()}
     for b in profile.bullets:
         allowed_tech |= _bullet_text_tokens(b)
+    # Eligibility/location keywords ("germany", "enrolled", "data science") are true facts
+    # the profile itself states, not skills that could be fabricated — an eligibility
+    # disqualifier's own keyword-extraction rule (extract_requirements.md #10) requires
+    # these be non-empty so the coverage gate can see them, but that makes them collide
+    # with this check's "claims unevidenced tech" logic when a cover letter truthfully
+    # restates them (e.g. "based in Germany").
+    not_fabricatable = location_terms() | {_normalize(t) for t in _eligibility_terms(profile.raw)}
 
     for section, bullets in draft.bullets.items():
         for b in bullets:
@@ -131,7 +138,10 @@ def validate_facts(draft: Draft, profile: Profile, jd_keywords: list[str] = ()) 
             local_tech = _local_tech(profile, b.source_bullet_id)
             for kw in jd_keywords:
                 k = _normalize(kw)
-                if not k or k in local_tech:
+                # 2-char keywords are too weak a signal here: eligibility disqualifiers
+                # like "Computer Science, AI, Data Science, IT" emit "ai"/"it" as literal
+                # keywords, and "it" collides with the ordinary pronoun in any sentence.
+                if not k or len(k) <= 2 or k in local_tech or k in not_fabricatable:
                     continue
                 if _contains_term(b.text, k):
                     errors.append(f"{section}: claims unevidenced tech {kw!r} (JD term, not in profile)")
@@ -139,7 +149,7 @@ def validate_facts(draft: Draft, profile: Profile, jd_keywords: list[str] = ()) 
     if draft.cover_letter.strip():
         for kw in jd_keywords:
             k = _normalize(kw)
-            if not k or k in allowed_tech:
+            if not k or len(k) <= 2 or k in allowed_tech or k in not_fabricatable:
                 continue
             if _contains_term(draft.cover_letter, k):
                 errors.append(f"cover_letter: claims unevidenced tech {kw!r} (JD term, not in profile)")

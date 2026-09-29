@@ -112,8 +112,10 @@ def rewrite(state: JobState, verbose: bool = False) -> dict:
             "type": "text",
             "text": f"<prior_validation_errors>\n{json.dumps(state.validation_errors, indent=2)}\n</prior_validation_errors>",
         })
+    # System block also needs ttl="1h" — see diagnose.py: a default-5m system block
+    # would come "after" the 1h profile breakpoint above in cache_control ordering and 400.
     messages = [
-        SystemMessage(content=[{"type": "text", "text": _prompt(), "cache_control": {"type": "ephemeral"}}]),
+        SystemMessage(content=[{"type": "text", "text": _prompt(), "cache_control": {"type": "ephemeral", "ttl": "1h"}}]),
         HumanMessage(content=content),
     ]
 

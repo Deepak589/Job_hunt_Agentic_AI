@@ -8,6 +8,11 @@ OUT="${1:-main_cv_v2.pdf}"
 python3 - "$OUT" <<'PY'
 import sys, typst
 # root must be the project dir so the template can read ../data/cv_data.json
-typst.compile("templates/cv_two_column.typ", output=sys.argv[1], root=".")
+typst.compile(
+    "templates/cv_two_column.typ",
+    output=sys.argv[1],
+    root=".",
+    sys_inputs={"data": "../data/cv_data.json"},
+)
 PY
 echo "wrote $OUT"
