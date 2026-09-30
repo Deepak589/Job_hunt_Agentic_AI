@@ -43,7 +43,13 @@ def _eligibility_terms(raw: dict, full_time: bool = False) -> set[str]:
     terms: set[str] = set()
     constraints = raw.get("constraints", {})
 
-    enrolled = [e for e in raw.get("education", []) if e.get("status") == "in_progress"]
+    # cv_extract.py's ExtractedEducation.status has no enum constraint, so the LLM is
+    # free to write "in progress" (natural English) where this schema documents
+    # "in_progress" (master_profile.example.yaml) — normalize spacing so either survives.
+    enrolled = [
+        e for e in raw.get("education", [])
+        if str(e.get("status", "")).strip().lower().replace(" ", "_") == "in_progress"
+    ]
     if enrolled:
         terms |= {
             "enrolled", "currently enrolled", "student", "matriculated",

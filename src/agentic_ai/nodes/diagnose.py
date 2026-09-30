@@ -24,7 +24,10 @@ def _prompt() -> str:
 def _model():
     # claude-sonnet-5 rejects an explicit `temperature` — the param is deprecated for
     # this model (confirmed live: "`temperature` is deprecated for this model").
-    return make_structured(settings.diagnose_model, Diagnosis, max_tokens=4096)
+    # 8192, not 4096: evidence IDs now include long repo-doc chunk paths
+    # ("repo:<project>:docs/<file>.md#<heading>"), and diagnose cites these per gap —
+    # a JD with many requirements can overflow 4096 output tokens on IDs alone.
+    return make_structured(settings.diagnose_model, Diagnosis, max_tokens=8192)
 
 
 def _requirements_brief(state: JobState) -> str:

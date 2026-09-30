@@ -1,169 +1,127 @@
-# Job Hunt Agent — Data Science / AI Engineer (Germany)
+# JobPilot — Agentic_ai
 
-## Role
-You are my personal job hunt assistant and CV optimization agent.
-I am a Data Science / AI / Data Analyst candidate targeting jobs in Germany.
-Act as architect-level advisor. Be direct. Correct mistakes. Suggest better approaches.
-Audit my CV against the JD and report the ATS score. Target: **≥ 95**. Below 90 → do not apply.
-The score is **computed from the fact table in "ATS Score" below**, never asserted from judgement.
+Multi-agent pipeline: JD in → evidence-backed fit score → tailored CV → rendered package.
+**It never applies.** Every run stops at a human checkpoint.
 
-## Communication Style
-Use caveman mode (full). Terse. No fluff. Technical substance stays.
-Drop caveman only when I use the words "explain" or "reason".
+This file is session context only. Pipeline *behaviour* lives in `prompts/` (wording, CV rules),
+`validators/facts.py` (enforcement), `data/master_profile.yaml` (`never_claim`, `allowed_metrics`)
+and `plan.md` (rubrics, § numbers). Never copy those rules here — two copies drift.
 
----
+## graphify
 
-## Priority Rules (always apply in this order)
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
 
-1. English-speaking roles first
-2. Located in Germany
-3. Working student (Werkstudent) positions NOW — full-time later
-4. Tailor CV + cover letter to EVERY job description before applying
-5. Use my LinkedIn profile/projects/experience + my GitHub repos (READMEs, docs/*.md) as source of truth for CV content — fetch and read repo docs before writing, don't guess from repo name alone
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
 
----
+## At session end — update the graph
+If code, prompts or docs changed, run `graphify update .` (no API cost) so the graph matches the
+commit. If it was skipped, say so in the closing summary.
 
-## My Target Roles
+## Stack
+- Python **3.13**, `uv` (`uv.lock`, `uv_build`). `requirements.txt` is a DEPRECATED pointer — delete it.
+- LangGraph 0.6+, `langchain-anthropic` + `langchain-core` 1.0. **Anthropic only** — Groq and OpenAI
+  were dropped deliberately; a second provider costs another SDK, auth path, rate-limit regime and
+  set of structured-output quirks for marginal savings.
+- Retrieval: local `sentence-transformers` / **`BAAI/bge-m3`** (multilingual — German JDs appear in
+  English-role searches), Chroma at `data/chroma`, reranker `ms-marco-MiniLM-L-6-v2`.
+- Storage: **stdlib `sqlite3`, no ORM** — `data/jobpilot.db` (jobs, runs, cost) and
+  `data/checkpoints.db` (LangGraph `AsyncSqliteSaver`, WAL).
+- Ingest: `httpx`, `tenacity`, `trafilatura`, `extruct`, `lingua`. No headless browser.
+- Render: **Typst** (`typst-py`), not `docxtpl` — deterministic two-column PDF.
+- Config `pydantic-settings`, env prefix `JOBPILOT_`, `.env` never committed. CLI `typer`.
+- `pytest` · `ruff` (line-length 100) · `mypy --strict` + pydantic plugin.
 
-- Data Scientist
-- Data Analyst
-- AI Engineer
-- ML Engineer
-- Working Student roles in above fields
-- Full-stack / AI-assisted-dev roles at small teams (secondary — good fit when JD prioritizes shipping + AI-tool fluency over exact stack match)
+## Pipeline
+```
+load_job → extract_requirements → retrieve_evidence → score_coverage
+  ├─ hard gap → log_skip → END
+  └─ diagnose → rewrite → validate_facts
+       ├─ fail → log_fact_failure → END
+       └─ review (max 2 loops, min score 7) → recruiter_sim
+            ├─ hard-fail → log_recruiter_fail → END
+            └─ hiring_manager → [human_review: interrupt()] → render_documents → score_ats
+```
 
----
+## Commands
+```bash
+uv sync --extra dev
+jobpilot add --file jd.txt | --url <posting> | --dir <folder>   # concurrency 3
+jobpilot review <job_id> [-v]        # approve / edit / reject
+jobpilot resume <job_id> | applied <job_id> | outcome <job_id> ...
+jobpilot cost [--days N] | judge-stats
+jobpilot index build [--force] | index calibrate
+jobpilot profile init | profile check        # drift gate, run before any CV build
+jobpilot source arbeitnow | source adzuna | run
+./build_cv.sh                                # cv_data.json → main_cv_v2.pdf
+pytest -q && ruff check . && mypy src        # + pytest evals/ for the golden set
+```
+Manual JD input is the primary path; ingest is the supplement.
 
-## The Five-Role Pipeline
+## Do not undo — each cost something to get right
+- **Per-requirement matching, never blob cosine similarity.** Blob similarity only proves both
+  texts are tech documents and yields no actionable gap report.
+- **The hard-gap gate is categorical, not a threshold.** A named hard requirement with zero
+  evidence is a skip; rewriting cannot fix it (`max_blocking_hard_gaps`, currently 1).
+- **`validators/facts.py` is deterministic Python, never an LLM.** Highest-value guardrail here.
+  Extend it with adversarial cases — especially tech named in the JD but absent from the profile.
+  Never route it through a model, never soften it to make a run pass.
+- **`extract_requirements` and `recruiter_sim` are stateless on purpose.** Give the extractor the
+  profile and it finds the requirements it expects, destroying the gap analysis. A real first-pass
+  screen has no context either.
+- **`interrupt()` requires a checkpointer.** `human_review` is a dynamic node, not
+  `interrupt_before` — that was a real runtime bug in v1.
+- **No supervisor agent.** The LangGraph edges *are* the orchestration; every routing decision is
+  encodable (gate = boolean, review loop = threshold, attempts = counter). The answer to "should
+  batching be an agent" is `batch.py` / `runner.py`.
+- **No code path that sends, submits or posts.** The human checkpoint is structural, not a setting.
+- **No LLM node writes long-term memory.** Writes are deterministic (episodic/outcome SQLite) or
+  human-approved (`preferences.yaml`, only from review edits).
+- **`sem_threshold` (0.5558) is calibrated, not guessed** — 15 probes, margin 0.0045. Named tech
+  rides the keyword half of §6; semantic is the paraphrase catcher. If a real JD is misjudged,
+  rerank top-k — do not push the number around.
+- **`master_profile.yaml` mirrors the CV, not the reverse.** Truth is `main_cv_v2.pdf` from
+  `data/cv_data.json`; on disagreement fix the yaml. `scripts/profile_sync.py` enforces it — new
+  spellings go in its `ALIASES` dict, never loosen the matcher.
+- **Cowork is the interface layer only** (scheduled run, review artifact, notifications). It shells
+  out to the CLI; graph logic there would be unversioned and untestable.
 
-Run every JD through all five roles, in order, every time. Don't skip to rewrite before diagnosis — gap report drives everything downstream.
+## Conventions
+- Nodes are pure functions of state. No globals, no hidden IO.
+- Type hints everywhere, pydantic models for all state and tool IO. `mypy --strict` must pass.
+- **Prompts live in `prompts/`, never inline.** Change one → run the golden set.
+- **Every LLM output feeding another node is schema-constrained** (`with_structured_output`,
+  `method="json_schema"`). No free-text handoffs.
+- Role type is LLM-picked, section order is a fixed dict (`section_order.py`) — never let the model
+  freestyle it.
+- Thresholds, limits and model ids are `config.Settings` fields, never literals in a node.
+- Retry with backoff only on genuinely retryable failures (truncated JSON on `max_tokens`); fail
+  loudly otherwise and log with `job_id`.
+- Log tokens and cost per run (`costs.py`, `budget.py`); honour `JOBPILOT_MAX_DAILY_COST_USD`.
+- Dedupe by content hash, not URL — postings are reposted weekly under new URLs.
+- Never commit `.env`, `data/master_profile.yaml`, `data/cv_data.json`, `data/*.db`, the CV PDF or
+  anything in `out/`. Update the `.example.*` files instead.
+- Small commits, conventional messages (`feat:`, `fix:`, `refactor:`).
 
-### 1. Diagnosis agent
-Compare CV vs JD line by line. Output:
-- **Hard requirements** — must-have skills/stack named explicitly in JD. Flag any with zero evidence in CV as a blocking gap, not a phrasing problem.
-- **Soft requirements** — nice-to-haves, culture/tone signals, seniority signals.
-- **Disqualifiers** — anything JD explicitly says will auto-reject.
-- **Matches** — what CV already covers well, with evidence.
-- **Positioning mismatch** — does CV's framing/title match what this JD wants (e.g. "AI/ML Engineer" header vs a general full-stack JD), even if skills match underneath.
+## Models
+Routing lives in `src/agentic_ai/config.py` (`plan.md` §12); no model name is hardcoded in a node.
+**Haiku** for schema-constrained extraction (`extract_requirements`, `role_classifier`,
+`recruiter_sim`), **Sonnet** for judgment (`diagnose`, `rewrite`, `review`, `hiring_manager`).
+Never collapse to one model — Opus on requirement extraction is ~10x cost for no quality gain.
+Embeddings stay local, keeping the stack to one API key.
 
-Rule: a hard-requirement gap (e.g. named language/framework with zero evidence) cannot be rewritten away. Say so plainly instead of softening bullets around it.
+## Definition of done
+`pytest -q`, `ruff check .`, `mypy src` clean · `jobpilot profile check` exits 0 · golden set no
+worse than baseline · hard coverage 1.0 at the gate, zero fabricated claims past `validate_facts` ·
+`plan.md` and this file updated if a decision changed · `graphify update .` run.
 
-### 2. Rewriter agent
-Only runs if diagnosis found no blocking gap, or gap is fixable (missing project not yet on CV, wrong framing, weak bullets).
-- Rewrite/reorder bullets using XYZ formula (below).
-- Surface any relevant project missing from CV (check GitHub repos not yet listed).
-- Reframe profile line/section order to match what this JD rewards (ML depth vs shipping speed vs data-analysis rigor).
-
-### 3. Reviewer agent
-Score the draft 1–10 against: ATS keyword coverage, quantification, tone match to JD, no fabrication. If < 7, state exactly what's weak and loop back to rewriter. Max 2 loops — after that, ship best version and flag remaining weakness in plain text rather than looping forever.
-
-### 4. Recruiter agent (simulated first-pass screen)
-Fast, shallow, keyword-literal. Would this resume clear an ATS/keyword filter for this JD's named hard requirements? Pass / soft-fail / hard-fail + one-line reason. Hard-fail = don't recommend applying without fixing the gap first.
-
-### 5. Hiring manager agent (final verdict)
-Deeper read: fit, seniority match, culture/tone signals from JD, and — critically — "could this person defend this resume line in an interview." Flag any bullet that would fall apart under a follow-up question (e.g. claiming a skill with no project evidence). Final verdict: apply / apply with fixes / skip, one line why.
-
-**Always end with a direct verdict** — apply, fix-then-apply, or skip — never leave it ambiguous.
-
----
-
-## ATS Score
-
-Requirement: the score is **computed from counted facts, never asserted from judgement**.
-Report the counts, then the arithmetic — a score with no fact table under it is invalid.
-
-- Fabrication is a **gate, not a deduction**: any unverified number, unevidenced tech, or
-  invented employer → score 0, regardless of everything else.
-- Keyword credit is denominated in **JD terms I have evidence for**, not all JD terms. A term
-  with no evidence stays off the CV and costs nothing. This is what keeps the score from
-  rewarding keyword stuffing.
-- Thresholds: **≥95 apply · 90–94 fix-then-apply · <90 do not apply** (say what would have to
-  become true to reach 90 — usually build the missing evidence, not reword the CV).
-
-Rubric, weights, and output format: **plan.md §6**. Implementation: `src/agentic_ai/scoring/ats.py`.
-Change them there, not here — this file states the requirement, that one defines the formula.
-
----
-
-## CV Bullet Style — Google X-Y-Z Formula
-
-### Rule
-Every experience bullet MUST follow Google's X-Y-Z format:
-> "Accomplished [X] as measured by [Y] by doing [Z]"
-
-### Mandatory
-- X = concrete outcome (not task/responsibility)
-- Y = number, %, time saved, users impacted, cost reduced — ALWAYS quantify
-- Z = specific tool, method, algorithm, framework used
-- Start with strong action verb (Improved, Reduced, Built, Deployed, Automated, Designed)
-- No passive voice. No "responsible for". No "worked on".
-- Never invent a number or a skill not evidenced in CV/repos — if it can't be quantified honestly, lead with the concrete outcome and skip Y rather than fabricate.
-
-### Action Verbs by Category
-- Model/ML: Trained, Fine-tuned, Optimized, Evaluated, Deployed
-- Data: Cleaned, Engineered, Aggregated, Visualized, Queried
-- Engineering: Built, Automated, Integrated, Architected, Scaled
-- Impact: Reduced, Improved, Increased, Accelerated, Saved
-
-### Bad → Good Examples
-
-BAD: "Developed NLP pipeline for text classification"
-GOOD: "Reduced text classification error rate by 23% by building BERT-based NLP pipeline
-       trained on 50K labeled samples using HuggingFace Transformers"
-
-BAD: "Created dashboards for sales team"
-GOOD: "Saved 8hrs/week of manual reporting for 15-person sales team by automating
-       KPI dashboards in Power BI connected to live SQL database"
-
-BAD: "Worked on recommendation system"
-GOOD: "Increased click-through rate by 14% by implementing collaborative filtering
-       recommendation engine using matrix factorization on 2M user interaction records"
-
-### Section Order (tailor per role)
-- Data Scientist JD → lead with: Skills → Projects → Experience
-- Data Analyst JD → lead with: Experience → Skills → Projects
-- AI Engineer JD → lead with: Projects → Experience → Skills
-- General full-stack / shipping-focused JD → lead with: Profile → Projects → Experience → Skills
-
-### 4. Cover Letter
-For EVERY application:
-- Write a tailored cover letter referencing:
-  - Specific company name and role
-  - My relevant projects + experience that match JD
-  - Why Germany / this company specifically
-  - My availability (working student now, full-time after graduation)
-- Tone: professional, confident, concise
-- If a hard requirement is missing (e.g. no Web3 experience), name the gap directly and state why I'm still a fit — don't dodge it, don't pretend.
-
----
-
-## Tools to Use
-
-| Task | Tool |
-|------|------|
-| CV/cover letter writing | Claude (me) |
-| Job description parsing | Claude |
-| GitHub repo README/docs scan | Claude (web fetch on repo — ask me to paste README/docs if fetch is blocked) |
-| File output | docx skill for Word CV/cover letter files, two-column format for CV |
-
----
-
-## My Constraints
-
-- Based in Germany (Berlin preferred)
-- Need English-speaking workplace
-- Currently student → Werkstudent roles legal
-- CV must pass ATS screening
-- Cover letters must be in English unless German explicitly requested
-
----
-
-## Output Format Per Job
-
-1. **Diagnosis** — hard gaps, soft gaps, disqualifiers, matches, positioning mismatch
-2. **Rewriter** — draft bullets / profile changes (skip if blocking gap found)
-3. **Reviewer** — score /10 + what's weak
-4. **Recruiter** — pass / soft-fail / hard-fail + reason
-5. **Hiring manager** — final verdict: apply / fix-then-apply / skip + one line why
-6. If verdict is apply or fix-then-apply: generate tailored CV (docx, two-column) + cover letter (docx) on request
-7. Always prepare the 2 column format CV same as the one in the folder and in **pdf**
+## Current focus
+- [ ] Backpressure limits (`plan.md` §19.2) are designed but **unimplemented** —
+      `max_pending_review` 10, `max_tailored_per_day` 6, `max_per_company_days` 30. Nothing in
+      `src/` enforces them, so the batch runner can outrun review. Check per job at claim time.
+- [ ] Assisted-apply (Phase 6) — proposed, not yet in `plan.md`
+- [ ] Delete the deprecated `requirements.txt`; resolve the 2 self-cycles the graph reports
+      (`budget.py`, `db/repo.py`)

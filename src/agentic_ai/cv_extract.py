@@ -19,6 +19,8 @@ import sys
 from datetime import date
 from pathlib import Path
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 from ruamel.yaml import YAML
 
@@ -62,7 +64,10 @@ class ExtractedEducation(BaseModel):
     location: str = ""
     start: str
     end: str | None = None
-    status: str = "completed"
+    # Literal, not free str: coverage.py's enrollment check matches "in_progress" exactly
+    # (master_profile.example.yaml's convention) — free text let the LLM write "in
+    # progress" with a space, which silently broke enrollment-based eligibility gating.
+    status: Literal["completed", "in_progress"] = "completed"
 
 
 class LanguageSkill(BaseModel):

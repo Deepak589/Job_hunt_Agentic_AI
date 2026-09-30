@@ -122,8 +122,15 @@ def chunk_by_heading(text: str, source_id_prefix: str) -> list[tuple[str, str]]:
     if current_lines:
         chunks.append((current_id, current_lines))
 
-    return [
-        (cid, joined)
-        for cid, lines in chunks
-        if (joined := "\n".join(lines).strip())
-    ]
+    # Two headings that slugify the same ("## Overview" repeated under different
+    # sections) would otherwise emit the same chunk_id twice — Chroma rejects the whole
+    # batch on a duplicate ID, silently breaking the index rebuild for every project.
+    seen: dict[str, int] = {}
+    out: list[tuple[str, str]] = []
+    for cid, lines in chunks:
+        joined = "\n".join(lines).strip()
+        if not joined:
+            continue
+        seen[cid] = seen.get(cid, 0) + 1
+        out.append((cid if seen[cid] == 1 else f"{cid}-{seen[cid]}", joined))
+    return out

@@ -39,6 +39,12 @@ the honest status.
 6. Never claim anything on the profile's `never_claim` list, in any form — not the exact
    sentence, not a paraphrase, not an implication. German fluency above A1/A2 is the one
    you will be most tempted to imply; do not.
+7. Do not echo the JD's own jargon in the cover letter or bullets unless a cited bullet's
+   own text uses that exact word. The JD's title and buzzwords ("agentic systems", "MCP",
+   a named framework) are the words most tempting to mirror back to sound aligned — doing
+   so plants an unevidenced claim the fact-checker will catch. Describe what was actually
+   built in the candidate's own terms ("multi-agent pipeline") instead of the JD's label
+   for the same thing ("agentic systems").
 
 ## If you are given prior validation errors
 
