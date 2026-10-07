@@ -50,18 +50,21 @@ def _run_cli(args: list[str]) -> dict[str, Any]:
 def list_pending_reviews() -> list[dict[str, Any]]:
     """Jobs currently paused at the human_review checkpoint, newest first isn't
     guaranteed — just every job awaiting a decision."""
-    summaries = []
-    for job_id in graph.list_pending_review_ids():
-        state = graph.get_paused_state(job_id)
-        summaries.append(
-            {
-                "job_id": state.job.id,
-                "company": state.job.company,
-                "title": state.job.title,
-                "score": state.scores.review_score,
-            }
-        )
-    return summaries
+    try:
+        summaries = []
+        for job_id in graph.list_pending_review_ids():
+            state = graph.get_paused_state(job_id)
+            summaries.append(
+                {
+                    "job_id": state.job.id,
+                    "company": state.job.company,
+                    "title": state.job.title,
+                    "score": state.scores.review_score,
+                }
+            )
+        return summaries
+    except KeyError as exc:
+        return [{"error": str(exc)}]
 
 
 @mcp.tool()
@@ -92,15 +95,18 @@ def get_job(job_id: str) -> dict[str, Any]:
 def get_applicant_profile() -> dict[str, Any]:
     """Contact fields Claude-in-Chrome needs to fill a form: name, email, phone,
     location, github, linkedin."""
-    identity = Profile.load().raw["identity"]
-    return {
-        "name": identity["name"],
-        "email": identity["email"],
-        "phone": identity["phone"],
-        "location": identity["location"],
-        "github": identity["github"],
-        "linkedin": identity["linkedin"],
-    }
+    try:
+        identity = Profile.load().raw["identity"]
+        return {
+            "name": identity["name"],
+            "email": identity["email"],
+            "phone": identity["phone"],
+            "location": identity["location"],
+            "github": identity["github"],
+            "linkedin": identity["linkedin"],
+        }
+    except (KeyError, OSError) as exc:
+        return {"error": str(exc)}
 
 
 @mcp.tool()
@@ -120,6 +126,8 @@ def add_job(jd_text: str | None = None, url: str | None = None) -> dict[str, Any
         )
     except subprocess.TimeoutExpired:
         return {"error": f"'{' '.join(args)}' timed out after {_CLI_TIMEOUT_S}s"}
+    except FileNotFoundError:
+        return {"error": "'jobpilot' not found on PATH — is the package installed in this environment?"}
     if result.returncode != 0:
         stderr_tail = "\n".join(result.stderr.strip().splitlines()[-5:])
         return {"error": stderr_tail or f"jobpilot exited {result.returncode}"}

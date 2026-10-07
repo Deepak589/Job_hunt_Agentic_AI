@@ -62,6 +62,29 @@ def test_get_job_missing_returns_error(monkeypatch) -> None:
     assert "error" in result
 
 
+def test_list_pending_reviews_missing_paused_state_returns_error(monkeypatch) -> None:
+    def fake_ids():
+        return ["stale-job"]
+
+    def raise_keyerror(jid):
+        raise KeyError(f"no paused job found for id {jid!r}")
+
+    monkeypatch.setattr(server.graph, "list_pending_review_ids", fake_ids)
+    monkeypatch.setattr(server.graph, "get_paused_state", raise_keyerror)
+
+    result = server.list_pending_reviews()
+
+    assert result == [{"error": "\"no paused job found for id 'stale-job'\""}]
+
+
+def test_get_applicant_profile_missing_file_returns_error(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(settings, "profile_path", tmp_path / "does_not_exist.yaml")
+
+    result = server.get_applicant_profile()
+
+    assert "error" in result
+
+
 def test_get_applicant_profile_reads_identity(monkeypatch, tmp_path) -> None:
     profile_yaml = tmp_path / "master_profile.yaml"
     profile_yaml.write_text(
@@ -115,6 +138,18 @@ def test_add_job_cli_failure_returns_error(monkeypatch) -> None:
     result = server.add_job(jd_text="some JD text")
 
     assert result == {"error": "budget cap exceeded"}
+
+
+def test_add_job_stdin_branch_missing_binary_returns_error(monkeypatch) -> None:
+    def fake_run(cmd, capture_output, text, timeout, input=None):
+        raise FileNotFoundError("jobpilot")
+
+    monkeypatch.setattr(server.subprocess, "run", fake_run)
+
+    result = server.add_job(jd_text="some JD text")
+
+    assert "error" in result
+    assert "not found on PATH" in result["error"]
 
 
 def test_review_job_approve_shells_out(monkeypatch) -> None:
