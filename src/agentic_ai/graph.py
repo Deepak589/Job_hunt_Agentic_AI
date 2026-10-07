@@ -350,13 +350,6 @@ async def _resume_review(job_id_: str, action: Literal["approve", "edit", "rejec
     async with _open_checkpointer() as saver:
         graph = build_graph(skip_render=False, checkpointer=saver, review_pause=True)
         config = {"configurable": {"thread_id": job_id_}, "callbacks": _tracing_callbacks()}
-        if action == "reject":
-            # Never re-invokes the graph — just reads back the paused state and marks it
-            # rejected, so no render happens and no further LLM calls are made.
-            snapshot = await graph.aget_state(config)
-            return JobState.model_validate(
-                {**snapshot.values, "skip_reason": "rejected by user at review"}
-            )
         resume_payload: dict = {"action": action}
         if action == "edit":
             assert draft is not None, "action='edit' requires draft"
@@ -410,9 +403,10 @@ async def _list_pending_review_ids() -> list[str]:
 
 
 def list_pending_review_ids() -> list[str]:
-    """Job ids currently paused at `human_review`. No `jobs` row exists for a paused
-    job (`persist_run` only runs once `review()`/`resume()` finishes one) so this scans
-    `checkpoints.db`'s thread ids directly instead of `jobpilot.db`."""
+    """Job ids currently paused at `human_review`. `jobpilot.db`'s `jobs` table has no
+    "paused" status to query (a row can exist from an earlier `add --review` call, but
+    nothing in it says the checkpoint is still sitting at human_review) so this scans
+    `checkpoints.db`'s thread ids directly instead."""
     return asyncio.run(_list_pending_review_ids())
 
 

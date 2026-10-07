@@ -13,6 +13,7 @@ No tool submits a form or posts anything. That boundary is structural (CLAUDE.md
 
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
 import tempfile
@@ -29,12 +30,21 @@ mcp = FastMCP("jobpilot")
 _CLI_TIMEOUT_S = 300  # a full pipeline run (extract/diagnose/rewrite/render) can take minutes
 
 
-def _run_cli(args: list[str]) -> dict[str, Any]:
+async def _run_cli(args: list[str], input: str | None = None) -> dict[str, Any]:
     """Shell out to the `jobpilot` console script. Never raises — CLI failures,
-    timeouts, and missing-binary errors all come back as {"error": ...}."""
+    timeouts, and missing-binary errors all come back as {"error": ...}.
+
+    Runs the blocking `subprocess.run` off the event loop thread (`asyncio.to_thread`)
+    — this can take up to `_CLI_TIMEOUT_S`, and the stdio MCP server has to keep
+    answering pings/cancellations on the loop while it waits."""
     try:
-        result = subprocess.run(  # noqa: PLW1510 - returncode checked explicitly below
-            args, capture_output=True, text=True, timeout=_CLI_TIMEOUT_S
+        result = await asyncio.to_thread(
+            subprocess.run,
+            args,
+            input=input,
+            capture_output=True,
+            text=True,
+            timeout=_CLI_TIMEOUT_S,
         )
     except subprocess.TimeoutExpired:
         return {"error": f"'{' '.join(args)}' timed out after {_CLI_TIMEOUT_S}s"}
@@ -42,18 +52,23 @@ def _run_cli(args: list[str]) -> dict[str, Any]:
         return {"error": "'jobpilot' not found on PATH — is the package installed in this environment?"}
     if result.returncode != 0:
         stderr_tail = "\n".join(result.stderr.strip().splitlines()[-5:])
-        return {"error": stderr_tail or f"jobpilot exited {result.returncode}"}
+        # rich.Console (jobpilot's CLI) writes the human-readable reason (reject,
+        # hard-gap skip, budget cap) to stdout, not stderr — never discard it in
+        # favor of a generic "exited N".
+        stdout_tail = "\n".join(result.stdout.strip().splitlines()[-5:])
+        return {"error": stderr_tail or stdout_tail or f"jobpilot exited {result.returncode}"}
     return {"status": "ok", "output": result.stdout.strip()}
 
 
 @mcp.tool()
-def list_pending_reviews() -> list[dict[str, Any]]:
+async def list_pending_reviews() -> list[dict[str, Any]]:
     """Jobs currently paused at the human_review checkpoint, newest first isn't
     guaranteed — just every job awaiting a decision."""
     try:
         summaries = []
-        for job_id in graph.list_pending_review_ids():
-            state = graph.get_paused_state(job_id)
+        ids = await asyncio.to_thread(graph.list_pending_review_ids)
+        for job_id in ids:
+            state = await asyncio.to_thread(graph.get_paused_state, job_id)
             summaries.append(
                 {
                     "job_id": state.job.id,
@@ -68,11 +83,11 @@ def list_pending_reviews() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-def get_job(job_id: str) -> dict[str, Any]:
+async def get_job(job_id: str) -> dict[str, Any]:
     """JD text, diagnosis, draft (profile line/bullets/cover letter), score, and
     rendered CV/cover-letter PDF paths (if the job has been approved and rendered)."""
     try:
-        state = graph.get_paused_state(job_id)
+        state = await asyncio.to_thread(graph.get_paused_state, job_id)
     except KeyError as exc:
         return {"error": str(exc)}
 
@@ -110,7 +125,7 @@ def get_applicant_profile() -> dict[str, Any]:
 
 
 @mcp.tool()
-def add_job(jd_text: str | None = None, url: str | None = None) -> dict[str, Any]:
+async def add_job(jd_text: str | None = None, url: str | None = None) -> dict[str, Any]:
     """Run a JD through the pipeline to the human_review checkpoint. Give either
     jd_text (pasted/read JD) or url (a posting URL) — not both."""
     if bool(jd_text) == bool(url):
@@ -118,24 +133,13 @@ def add_job(jd_text: str | None = None, url: str | None = None) -> dict[str, Any
     args = ["jobpilot", "add", "--review"]
     if url:
         args += ["--url", url]
-        return _run_cli(args)
+        return await _run_cli(args)
     args += ["--stdin"]
-    try:
-        result = subprocess.run(  # noqa: PLW1510 - returncode checked explicitly below
-            args, input=jd_text, capture_output=True, text=True, timeout=_CLI_TIMEOUT_S
-        )
-    except subprocess.TimeoutExpired:
-        return {"error": f"'{' '.join(args)}' timed out after {_CLI_TIMEOUT_S}s"}
-    except FileNotFoundError:
-        return {"error": "'jobpilot' not found on PATH — is the package installed in this environment?"}
-    if result.returncode != 0:
-        stderr_tail = "\n".join(result.stderr.strip().splitlines()[-5:])
-        return {"error": stderr_tail or f"jobpilot exited {result.returncode}"}
-    return {"status": "ok", "output": result.stdout.strip()}
+    return await _run_cli(args, input=jd_text)
 
 
 @mcp.tool()
-def review_job(job_id: str, action: str, edits: dict[str, Any] | None = None) -> dict[str, Any]:
+async def review_job(job_id: str, action: str, edits: dict[str, Any] | None = None) -> dict[str, Any]:
     """approve / edit / reject a job paused at human_review. `edits` (a Draft, same
     shape as get_job's "draft" field) is required when action == "edit"."""
     if action not in ("approve", "edit", "reject"):
@@ -149,19 +153,19 @@ def review_job(job_id: str, action: str, edits: dict[str, Any] | None = None) ->
             json.dump(edits, f)
             edits_path = f.name
         try:
-            return _run_cli(
+            return await _run_cli(
                 ["jobpilot", "review", job_id, "--action", "edit", "--edits-file", edits_path]
             )
         finally:
             Path(edits_path).unlink(missing_ok=True)
-    return _run_cli(["jobpilot", "review", job_id, "--action", action])
+    return await _run_cli(["jobpilot", "review", job_id, "--action", action])
 
 
 @mcp.tool()
-def mark_applied(job_id: str) -> dict[str, Any]:
+async def mark_applied(job_id: str) -> dict[str, Any]:
     """Record that job_id's tailored CV was sent, after the user clicks Submit
     themselves in Chrome."""
-    return _run_cli(["jobpilot", "applied", job_id])
+    return await _run_cli(["jobpilot", "applied", job_id])
 
 
 def main() -> None:
