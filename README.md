@@ -178,6 +178,26 @@ Set `JOBPILOT_MAX_DAILY_COST_USD` (env or `.env`) to cap daily spend — `jobpil
 checks today's total against it before running the graph and refuses (exit 1, no LLM
 calls made) once the cap is hit. Unset (default) means no cap.
 
+## Claude Desktop (MCP)
+
+Add to Claude Desktop's MCP config (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "jobpilot": {
+      "command": "uv",
+      "args": ["run", "--directory", "/absolute/path/to/Agentic_ai", "jobpilot-mcp"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop. Ask it to list pending reviews, get a job's draft, or approve
+one — it calls the MCP tools above. To fill an application form, open the job posting
+in Chrome (Claude-in-Chrome extension) and ask Claude to fill it using the job's data —
+it never submits; that click stays yours.
+
 ## Tracing (optional)
 
 Set these to get a Langfuse trace (latency, inputs/outputs) per graph node run:
