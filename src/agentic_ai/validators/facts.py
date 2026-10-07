@@ -18,12 +18,14 @@ Three checks, each catching a distinct way a rewrite can lie:
    a real skill evidenced by a different job would pass as evidence for this one. Prose
    with no citation (the cover letter) has no single bullet to scope to, so it is checked
    against profile-wide evidence instead (skills, stack, AND every bullet's own text).
-   Only HARD and DISQUALIFIER requirement keywords are checked here — a SOFT nice-to-have
-   is exactly the kind of generic, non-committal term ("data", "learning", "analytical")
-   an extractor tags loosely; flagging it at the same severity as a hard-requirement
-   fabrication produced false positives in live testing (2026-09-15) with no real
-   fabrication behind them. The caller (`nodes/validate_facts.py`) filters by type before
-   calling this function.
+   Only HARD requirement keywords are checked here — a SOFT nice-to-have is exactly the
+   kind of generic, non-committal term ("data", "learning", "analytical") an extractor
+   tags loosely; flagging it at the same severity as a hard-requirement fabrication
+   produced false positives in live testing (2026-09-15) with no real fabrication behind
+   them. DISQUALIFIER keywords are excluded entirely (not filtered by word here) — by the
+   time a draft exists, `hard_gap_gate` already proved every disqualifier true or sent the
+   job to skip, so re-checking them for fabrication is redundant by construction. The
+   caller (`nodes/validate_facts.py`) filters by type before calling this function.
 
 A fourth check runs over the whole draft (bullets + cover letter): an unclaimable-fluency
 language claim, reusing the exact language-fluency logic `coverage.py` already built for
@@ -118,12 +120,18 @@ def validate_facts(draft: Draft, profile: Profile, jd_keywords: list[str] = ()) 
     allowed_tech = {_normalize(t) for t in profile.all_tech() | profile.all_stack()}
     for b in profile.bullets:
         allowed_tech |= _bullet_text_tokens(b)
+    # profile_summary (core + proof_points) is free-text evidence too, not tied to any
+    # one bullet id — without it, a word the profile genuinely states there (e.g. "cloud"
+    # in "owned the Kubernetes, CI/CD and AWS layer of a cloud project") reads as an
+    # unevidenced JD term the cover letter must not have said.
+    summary = profile.raw.get("profile_summary", {})
+    summary_text = str(summary.get("core", "")) + " " + " ".join(summary.get("proof_points", []))
+    allowed_tech |= set(_normalize(summary_text).split())
     # Eligibility/location keywords ("germany", "enrolled", "data science") are true facts
-    # the profile itself states, not skills that could be fabricated — an eligibility
-    # disqualifier's own keyword-extraction rule (extract_requirements.md #10) requires
-    # these be non-empty so the coverage gate can see them, but that makes them collide
-    # with this check's "claims unevidenced tech" logic when a cover letter truthfully
-    # restates them (e.g. "based in Germany").
+    # the profile itself states, not skills that could be fabricated — kept as a defensive
+    # exemption for the rare hard requirement phrased as an eligibility fact (e.g. "must
+    # be EU-eligible" tagged hard). Disqualifier keywords never reach this function at all
+    # (see module docstring), so this set is no longer the primary defense it once was.
     not_fabricatable = location_terms() | {_normalize(t) for t in _eligibility_terms(profile.raw)}
 
     for section, bullets in draft.bullets.items():

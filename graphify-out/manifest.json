@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "build_cv.sh": {
-    "mtime": 1790675009.5832045,
-    "ast_hash": "a21d8d12a5db982c372d0b14e3c84060",
+    "mtime": 1791195915.4655359,
+    "ast_hash": "3cc8a214f61d27740bf1a2cd772fb2b4",
     "semantic_hash": ""
   },
   "data/cv_data.example.json": {
@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "src/agentic_ai/config.py": {
-    "mtime": 1790076099.7184522,
-    "ast_hash": "bcb8da930813eaa361c1502a328d0814",
+    "mtime": 1791195915.4665856,
+    "ast_hash": "63132d270b7cf6fa130c9e4c621ec607",
     "semantic_hash": ""
   },
   "src/agentic_ai/costs.py": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "src/agentic_ai/graph.py": {
-    "mtime": 1790009390.9610217,
-    "ast_hash": "dbfe18098b4a21eb5497d2f14a61e92a",
+    "mtime": 1791195915.466867,
+    "ast_hash": "558f2f937d4e4440d0c5503f17869a7a",
     "semantic_hash": ""
   },
   "src/agentic_ai/judgestats.py": {
@@ -155,13 +155,13 @@
     "semantic_hash": ""
   },
   "src/agentic_ai/nodes/rewrite.py": {
-    "mtime": 1790675009.584967,
-    "ast_hash": "ff982843c50ec1a28204f71e083edfdb",
+    "mtime": 1791195915.46723,
+    "ast_hash": "17804c6dd7a23b1e8daed21f6c9e75ad",
     "semantic_hash": ""
   },
   "src/agentic_ai/nodes/validate_facts.py": {
-    "mtime": 1789507591.465539,
-    "ast_hash": "d54806e331528421472e5670bbe293d9",
+    "mtime": 1791195915.467482,
+    "ast_hash": "dd1839c8c7210feccf2da92b8fbba7a1",
     "semantic_hash": ""
   },
   "src/agentic_ai/preferences.py": {
@@ -175,8 +175,8 @@
     "semantic_hash": ""
   },
   "src/agentic_ai/render.py": {
-    "mtime": 1790675009.5851543,
-    "ast_hash": "1cb750a8fa30b629a2a5e573ef5d4df3",
+    "mtime": 1791195915.4677813,
+    "ast_hash": "5729cc56d87ee0bd81d655a884c9ec49",
     "semantic_hash": ""
   },
   "src/agentic_ai/repo_docs.py": {
@@ -250,8 +250,8 @@
     "semantic_hash": ""
   },
   "src/agentic_ai/state.py": {
-    "mtime": 1790007620.4161305,
-    "ast_hash": "2bdf5fcc8ab8f215110e15c387a96dcf",
+    "mtime": 1791195915.4680593,
+    "ast_hash": "95bf2ba14ddd815beb204235d7862880",
     "semantic_hash": ""
   },
   "src/agentic_ai/validators/__init__.py": {
@@ -260,8 +260,8 @@
     "semantic_hash": ""
   },
   "src/agentic_ai/validators/facts.py": {
-    "mtime": 1790675223.1823015,
-    "ast_hash": "ffa5e966e9c1dc3c22d648b01d941ac3",
+    "mtime": 1791195915.468324,
+    "ast_hash": "1130b95f15c451e0cba229bf6cd55046",
     "semantic_hash": ""
   },
   "tests/test_ats_score.py": {
@@ -295,8 +295,8 @@
     "semantic_hash": ""
   },
   "tests/test_coverage.py": {
-    "mtime": 1790675009.5857253,
-    "ast_hash": "f026e0b550a7cab0127736db483e9856",
+    "mtime": 1791195915.468536,
+    "ast_hash": "d6bc42ec86223dcc8ed347ffcb29b48a",
     "semantic_hash": ""
   },
   "tests/test_db_repo.py": {
@@ -365,8 +365,8 @@
     "semantic_hash": ""
   },
   "tests/test_render.py": {
-    "mtime": 1789920947.9475553,
-    "ast_hash": "1d9c6eecd299f08bc01d295e50574537",
+    "mtime": 1791195915.4687555,
+    "ast_hash": "365151eeda8ef1ab21ba925ba320c553",
     "semantic_hash": ""
   },
   "tests/test_repo_docs.py": {
@@ -385,8 +385,8 @@
     "semantic_hash": ""
   },
   "tests/test_run_many.py": {
-    "mtime": 1790007739.0758493,
-    "ast_hash": "1a680b37906f9bbcebf52bb6f8ce8a7a",
+    "mtime": 1791195915.4689956,
+    "ast_hash": "b31051f38b136f116caeb660a1dbc599",
     "semantic_hash": ""
   },
   "tests/test_runner.py": {
@@ -445,18 +445,13 @@
     "semantic_hash": ""
   },
   "tests/test_validate_facts_node.py": {
-    "mtime": 1789507636.3960238,
-    "ast_hash": "47908115d4dee9445cbc5ace074ecef0",
+    "mtime": 1791195915.4692128,
+    "ast_hash": "da7b2e7525971966005412f3a937b912",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1790680779.3553374,
-    "ast_hash": "82efb97a359f5c7290bf2513d14686be",
-    "semantic_hash": ""
-  },
-  "CLAUDE.refined.md": {
-    "mtime": 1790680446.817305,
-    "ast_hash": "c464c574c2d55a7f240bdac3b5d43707",
+    "mtime": 1791195915.4652762,
+    "ast_hash": "952e73d055b178724139c20e2b3f53bc",
     "semantic_hash": ""
   },
   "README.md": {
@@ -559,11 +554,6 @@
     "ast_hash": "97717946e6f6d2ab0b822a3127c61ee3",
     "semantic_hash": ""
   },
-  "example/JD.txt": {
-    "mtime": 1790594558.724832,
-    "ast_hash": "dda2e28a203536322cacfe110747fd7f",
-    "semantic_hash": ""
-  },
   "improvement.md": {
     "mtime": 1789735344.0222309,
     "ast_hash": "1afc996a33fc15a9bedee2ef038e27f9",
@@ -605,8 +595,8 @@
     "semantic_hash": ""
   },
   "prompts/rewrite.md": {
-    "mtime": 1790678341.136026,
-    "ast_hash": "f48043c4ec138c8583edeab4efd57f26",
+    "mtime": 1791195915.4660892,
+    "ast_hash": "f0499ecb2aabc0f2dc36675af15d0bc1",
     "semantic_hash": ""
   },
   "requirements.txt": {
@@ -629,14 +619,199 @@
     "ast_hash": "6801c0a24b73765d46d556389313fe08",
     "semantic_hash": ""
   },
-  "example/Deepak_Katukuri_CV_SAP.pdf": {
-    "mtime": 1790239753.7252395,
+  "src/agentic_ai/nodes/judge_requirements.py": {
+    "mtime": 1790933324.4106083,
+    "ast_hash": "49c6636ed5a9114ac165e1b3b6dc779f",
+    "semantic_hash": ""
+  },
+  "tests/test_judge_requirements.py": {
+    "mtime": 1790894025.5829782,
+    "ast_hash": "fe9f7d35e1707a63b926ee7c6d9a29e2",
+    "semantic_hash": ""
+  },
+  "Bugs.md": {
+    "mtime": 1790803927.5250711,
+    "ast_hash": "6bd7ca0b94e766dba19c3f95ecd4001b",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/Avelios_SWE-Python_Munich/reason.md": {
+    "mtime": 1790852406.4217868,
+    "ast_hash": "ece85d8c27b73ad3d42cdfb5becc8c34",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/BCG_WorkingStudent_AppliedAI/reason.md": {
+    "mtime": 1790852406.419583,
+    "ast_hash": "53e1f775d7b8b8f2b0c87204c2b65e43",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/Goaudio_FullStack-AI_Munich/reason.md": {
+    "mtime": 1790852406.4224749,
+    "ast_hash": "afb4c7282aac43e96dbd2dd2b0439b58",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/Lovehoney_LegalOps-AI_Berlin/reason.md": {
+    "mtime": 1790852406.421073,
+    "ast_hash": "9c86f39b00753f4d124f6968bde51d4e",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/Merantix_Fullstack_Berlin/reason.md": {
+    "mtime": 1790852406.4261315,
+    "ast_hash": "3cb082ff8a7195383730662d19574043",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/Retorio_DataProduct_Munich/reason.md": {
+    "mtime": 1790852406.423941,
+    "ast_hash": "d45380a2251f13db41e5c17d73cdff6e",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/SAP_KymaAI_Garching/reason.md": {
+    "mtime": 1790852406.423222,
+    "ast_hash": "5b8e3b9e4a7dc7ab9e7818474994299b",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/Temedica_AI-Agentic/reason.md": {
+    "mtime": 1790852406.4246671,
+    "ast_hash": "1d3335b014c68a8ffd576730c9532e7f",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/mellowNOIR_AI-Automation_Berlin/reason.md": {
+    "mtime": 1790852406.425399,
+    "ast_hash": "4649947c5c47677fe26c54279a72f5d7",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/valuemize_AI-SWE_Munich/reason.md": {
+    "mtime": 1790852406.4203131,
+    "ast_hash": "9a06ca13b0e4e23a434cd951ee5e4cac",
+    "semantic_hash": ""
+  },
+  "Examples/CLAUDE.md": {
+    "mtime": 1790070408.0364187,
+    "ast_hash": "87a5391062cdaac8c3206a4b2d9fefae",
+    "semantic_hash": ""
+  },
+  "Examples/README.md": {
+    "mtime": 1790852406.428099,
+    "ast_hash": "57305ea63f2a5022bcad947fe92a341e",
+    "semantic_hash": ""
+  },
+  "Examples/Skipped/AURELIUS_AI-Automation_Munich/reason.md": {
+    "mtime": 1790852406.426811,
+    "ast_hash": "23cf2edeebd1e93061233490e4a01f4f",
+    "semantic_hash": ""
+  },
+  "Examples/Skipped/NOW-GmbH/reason.md": {
+    "mtime": 1790852406.4273932,
+    "ast_hash": "597640eeaa75f85607566b4847ce2858",
+    "semantic_hash": ""
+  },
+  "prompts/judge_requirements.md": {
+    "mtime": 1790893934.6576662,
+    "ast_hash": "a8e44ad81636848956c4681d92368420",
+    "semantic_hash": ""
+  },
+  "templates/cover_letter.html": {
+    "mtime": 1791195723.02399,
+    "ast_hash": "88694edd779983388f11be5aafa2e07c",
+    "semantic_hash": ""
+  },
+  "templates/cv_two_column.html": {
+    "mtime": 1791195986.6119473,
+    "ast_hash": "6c729900c3041bb0417f0ab83e626de9",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/Avelios_SWE-Python_Munich/Deepak_Katukuri_CV_Avelios.pdf": {
+    "mtime": 1790852406.3625925,
+    "ast_hash": "f9950df94ff952276035e4cea09a75ea",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/Avelios_SWE-Python_Munich/Deepak_Katukuri_CoverLetter_Avelios.pdf": {
+    "mtime": 1790852406.3643959,
+    "ast_hash": "01a676fdbe6188ce6ac0703698a0cf38",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/BCG_WorkingStudent_AppliedAI/Deepak_Katukuri_CV_BCG.pdf": {
+    "mtime": 1790852406.336484,
+    "ast_hash": "c78f6e1a8f48691d082619fdc138e9ba",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/BCG_WorkingStudent_AppliedAI/Deepak_Katukuri_CoverLetter_BCG.pdf": {
+    "mtime": 1790852406.3383346,
+    "ast_hash": "a1b03707e1714cfd618de36d68a52370",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/Goaudio_FullStack-AI_Munich/Deepak_Katukuri_CV_Goaudio.pdf": {
+    "mtime": 1790852406.3726146,
+    "ast_hash": "cae85be554063940e1a218c535f060c2",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/Goaudio_FullStack-AI_Munich/Deepak_Katukuri_CoverLetter_Goaudio.pdf": {
+    "mtime": 1790852406.374633,
+    "ast_hash": "77c053d3cdb056f3ecde2e3a3ed6a862",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/Lovehoney_LegalOps-AI_Berlin/Deepak_Katukuri_CV_Lovehoney.pdf": {
+    "mtime": 1790852406.3546815,
+    "ast_hash": "88cb8a34ce83eb7fc5a7893ee76fe7b8",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/Lovehoney_LegalOps-AI_Berlin/Deepak_Katukuri_CoverLetter_Lovehoney.pdf": {
+    "mtime": 1790852406.3562255,
+    "ast_hash": "1c091e4c17d7269f0812f774212d39b6",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/Merantix_Fullstack_Berlin/Deepak_Katukuri_CV_Merantix_Fullstack.pdf": {
+    "mtime": 1790852406.4163294,
+    "ast_hash": "ef1ea5c444acef4d41cf44bd5898249a",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/Merantix_Fullstack_Berlin/Deepak_Katukuri_CoverLetter_Merantix.pdf": {
+    "mtime": 1790852406.417864,
+    "ast_hash": "dbc0ad7dcfe99c59a675929f9c7a8817",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/Retorio_DataProduct_Munich/Deepak_Katukuri_CV_Retorio.pdf": {
+    "mtime": 1790852406.3885334,
+    "ast_hash": "52f147cfa0e970568f4bf2d88dac8171",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/Retorio_DataProduct_Munich/Deepak_Katukuri_CoverLetter_Retorio.pdf": {
+    "mtime": 1790852406.3911507,
+    "ast_hash": "e1437fb69ce312d61ae1d190d17b35ff",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/SAP_KymaAI_Garching/Deepak_Katukuri_CV_SAP.pdf": {
+    "mtime": 1790852406.3800979,
     "ast_hash": "66842ab3621704c283d9cca10e5a75dd",
     "semantic_hash": ""
   },
-  "example/Deepak_Katukuri_CoverLetter_SAP.pdf": {
-    "mtime": 1790239754.322976,
+  "Examples/Applied/SAP_KymaAI_Garching/Deepak_Katukuri_CoverLetter_SAP.pdf": {
+    "mtime": 1790852406.381616,
     "ast_hash": "eeac4ba41b0a66d7a04676283a316ea7",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/Temedica_AI-Agentic/Deepak_Katukuri_CV_Temedica.pdf": {
+    "mtime": 1790852406.3978314,
+    "ast_hash": "efa4d1b87febdd9741ed9c96ab940ee2",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/Temedica_AI-Agentic/Deepak_Katukuri_CoverLetter_Temedica.pdf": {
+    "mtime": 1790852406.3997862,
+    "ast_hash": "6ce146f5c05c672c7584f7c5c5b6e51d",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/mellowNOIR_AI-Automation_Berlin/Deepak_Katukuri_CV_mellowNOIR.pdf": {
+    "mtime": 1790852406.4075294,
+    "ast_hash": "01aea9dd53c4bc21eb33624cb2c2c48c",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/mellowNOIR_AI-Automation_Berlin/Deepak_Katukuri_CoverLetter_mellowNOIR.pdf": {
+    "mtime": 1790852406.4092562,
+    "ast_hash": "6961edf0ff2cb0d7ef33ee75730486d6",
+    "semantic_hash": ""
+  },
+  "Examples/Applied/valuemize_AI-SWE_Munich/Deepak_Katukuri_CV_valuemize.pdf": {
+    "mtime": 1790852406.3461337,
+    "ast_hash": "2921910512662d1d2abbc0efa4541de7",
     "semantic_hash": ""
   }
 }

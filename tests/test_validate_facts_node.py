@@ -2,8 +2,10 @@
 
 A soft nice-to-have keyword is exactly the generic, non-committal term an extractor
 tags loosely ("data", "learning") — checking it at the same severity as a hard
-requirement produced false positives against real JDs. This node must only pass
-hard/disqualifier keywords into the fact validator, never soft ones.
+requirement produced false positives against real JDs. A disqualifier's keywords are
+excluded too: `hard_gap_gate` already sent every unmet disqualifier to skip/END before
+a draft exists, so re-checking them for fabrication here is redundant by construction.
+This node must only pass hard keywords into the fact validator.
 """
 
 from __future__ import annotations
@@ -50,11 +52,14 @@ def test_hard_keyword_not_evidenced_anywhere_is_still_flagged() -> None:
     assert any("kubernetes" in e.lower() for e in out["validation_errors"])
 
 
-def test_disqualifier_keyword_not_evidenced_anywhere_is_still_flagged() -> None:
+def test_disqualifier_keyword_is_never_checked_here() -> None:
+    """Disqualifiers are proven true upstream by `hard_gap_gate` before a draft ever
+    exists — an unmet one never reaches this node. Re-checking one here would only
+    reproduce the brittle eligibility-vs-tech word-list this node used to need."""
     profile = Profile.load()
     real = profile.by_id("exp.valuemomentum.b1")
     assert real is not None
     req = Requirement(text="requires: Kubernetes", type="disqualifier", keywords=["kubernetes"])
     state = _state_with_requirement(req, "Deployed the fix using Kubernetes.", real.id)
     out = validate_facts_node(state)
-    assert any("kubernetes" in e.lower() for e in out["validation_errors"])
+    assert out["validation_errors"] == []

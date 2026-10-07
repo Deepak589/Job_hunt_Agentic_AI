@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 2.4cm 2.2cm; }
+  body { font-family: "Carlito", "Calibri", Arial, sans-serif; font-size: 10.5pt;
+    color: #1F2933; line-height: 1.5; text-align: justify; }
+  p { margin: 0 0 0.8em; }
+  .meta { margin-bottom: 1.2em; }
+</style>
+</head>
+<body>
+  <p class="meta">{{ d.name }}<br>{{ d.email }} &middot; {{ d.phone }} &middot; {{ d.location }}</p>
+  <p class="meta">{{ today }}</p>
+  <p class="meta">Re: Application for {{ d.title }} at {{ d.company }}</p>
+  {% for para in d.body.split("\n\n") %}
+  <p>{{ para }}</p>
+  {% endfor %}
+</body>
+</html>

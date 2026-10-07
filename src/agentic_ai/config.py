@@ -63,8 +63,11 @@ class Settings(BaseSettings):
     sem_threshold: float = 0.5558
 
     # --- gate ---
-    # §18.4: start at 1, tune once there are ~30 runs with real outcomes.
-    max_blocking_hard_gaps: int = 1
+    # Raised from 1 to 3: `judge_requirements` now gives every uncovered hard gap an LLM
+    # second opinion first, so what reaches this count is a higher-confidence real gap,
+    # not a keyword-phrasing miss — the budget can afford to be looser than the original
+    # "start at 1" figure, which was tuned against the old all-keyword-miss signal.
+    max_blocking_hard_gaps: int = 3
 
     # --- models (§12 routing) ---
     extract_model: str = "claude-haiku-4-5-20251001"  # requirement extraction, cheap + structured
@@ -74,6 +77,7 @@ class Settings(BaseSettings):
     review_model: str = "claude-sonnet-5"
     recruiter_model: str = "claude-haiku-4-5-20251001"  # role 4: shallow, keyword-literal, fast
     hiring_manager_model: str = "claude-sonnet-5"  # role 5: defensibility judgment
+    requirement_judge_model: str = "claude-sonnet-5"  # second opinion on uncovered hard/disqualifier reqs
 
     # --- rewrite loop ---
     # CLAUDE.md Reviewer agent: "Max 2 loops — after that, ship best version and flag
@@ -85,7 +89,10 @@ class Settings(BaseSettings):
     # --- render overflow guard --- enforced structurally in rewrite() so a draft can't
     # overflow the one-page template in the first place, cheaper than detecting it after
     # render (ats.py's page_count gate is the belt-and-suspenders backstop for this).
-    max_bullets_per_section: int = 5
+    # 20, not 5: main_cv_v2 (cv_data.json) already fits all content on one page at full
+    # length — profile has 17 project bullets + 4 experience bullets total (2026-10-05)
+    # — so the cap only needs to stop a runaway model, not trim real profile content.
+    max_bullets_per_section: int = 20
     max_bullet_chars: int = 220
 
     # --- tracing (optional) ---

@@ -31,13 +31,14 @@ commit. If it was skipped, say so in the closing summary.
 - Storage: **stdlib `sqlite3`, no ORM** — `data/jobpilot.db` (jobs, runs, cost) and
   `data/checkpoints.db` (LangGraph `AsyncSqliteSaver`, WAL).
 - Ingest: `httpx`, `tenacity`, `trafilatura`, `extruct`, `lingua`. No headless browser.
-- Render: **Typst** (`typst-py`), not `docxtpl` — deterministic two-column PDF.
+- Render: **HTML (Jinja2) + headless Chrome** `--print-to-pdf`, not `docxtpl`/Typst — same
+  approach as the Job_finder repo's `render_cv.sh`, so both CV pipelines render the same way.
 - Config `pydantic-settings`, env prefix `JOBPILOT_`, `.env` never committed. CLI `typer`.
 - `pytest` · `ruff` (line-length 100) · `mypy --strict` + pydantic plugin.
 
 ## Pipeline
 ```
-load_job → extract_requirements → retrieve_evidence → score_coverage
+load_job → extract_requirements → retrieve_evidence → score_coverage → judge_requirements
   ├─ hard gap → log_skip → END
   └─ diagnose → rewrite → validate_facts
        ├─ fail → log_fact_failure → END
@@ -65,10 +66,29 @@ Manual JD input is the primary path; ingest is the supplement.
 - **Per-requirement matching, never blob cosine similarity.** Blob similarity only proves both
   texts are tech documents and yields no actionable gap report.
 - **The hard-gap gate is categorical, not a threshold.** A named hard requirement with zero
-  evidence is a skip; rewriting cannot fix it (`max_blocking_hard_gaps`, currently 1).
+  evidence is a skip; rewriting cannot fix it (`max_blocking_hard_gaps`, currently 3 — raised
+  from 1 because `judge_requirements`, below, now gives every uncovered hard gap an LLM second
+  opinion first, so what reaches this count is a higher-confidence real gap, not a keyword miss).
+  SOFT coverage stays pure keyword+semantic, untouched.
 - **`validators/facts.py` is deterministic Python, never an LLM.** Highest-value guardrail here.
   Extend it with adversarial cases — especially tech named in the JD but absent from the profile.
-  Never route it through a model, never soften it to make a run pass.
+  Never route it through a model, never soften it to make a run pass. It only ever receives HARD
+  keywords now — a DISQUALIFIER is already proven true by `hard_gap_gate` before a draft exists,
+  so re-checking one here was a category error (Bugs.md #2), not a case this file should extend.
+- **`judge_requirements` (LLM, Sonnet) is a deliberate, narrow exception to "deterministic gate
+  only."** It runs after `score_coverage`, on HARD and DISQUALIFIER requirements the
+  keyword/semantic pass could not match — real JD phrasing varies ("EU work authorization" vs
+  "German citizen", "cloud-native infra" vs "owns the Kubernetes/CI/CD/AWS layer") in a way a
+  fixed keyword list keeps missing one word at a time (Bugs.md #2). Guardrail: `unmet` requires
+  either a quoted contradiction already in the profile (disqualifier) or a plain, unambiguous
+  domain mismatch (hard requirement) — never silence. A requirement naming a tech/tool the
+  profile never mentions must come back `unknown`, which asks at review (`open_questions`)
+  instead of auto-gapping. It never touches SOFT coverage.
+  **Deliberate asymmetry:** a DISQUALIFIER confirmed `unmet` is still an immediate, uncounted
+  skip (`scoring/ats.py`'s final gate zeroes any unmet disqualifier regardless of draft quality,
+  so there is no point drafting one). A HARD requirement confirmed `unmet` instead joins the
+  `max_blocking_hard_gaps` budget above. Disqualifiers are not "softer" now — only less likely
+  to be misjudged on wording.
 - **`extract_requirements` and `recruiter_sim` are stateless on purpose.** Give the extractor the
   profile and it finds the requirements it expects, destroying the gap analysis. A real first-pass
   screen has no context either.

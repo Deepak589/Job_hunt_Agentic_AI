@@ -2,7 +2,7 @@
 LLM-calling node is monkeypatched, same convention/stubs as test_graph_phase3.py, so
 this makes zero real API calls. Uses skip_render=True (the Phase 1/2 path) so the run
 stops at `review` — recruiter_sim/hiring_manager aren't needed to prove ordering and
-concurrency, and staying off the render path avoids the Typst/profile-data dependency."""
+concurrency, and staying off the render path avoids the Chrome/profile-data dependency."""
 
 from __future__ import annotations
 
@@ -141,3 +141,43 @@ def test_run_many_rejects_jobs_over_the_daily_budget_cap(monkeypatch, tmp_path) 
 
     assert len(results) == 2
     assert all(s.skip_reason == "budget_cap_hit" for s in results)
+
+
+def test_run_many_persists_cost_from_a_crashed_job(monkeypatch, tmp_path) -> None:
+    """A node raising mid-graph (e.g. the real max_tokens parse failures seen in
+    judge_requirements/rewrite) must not lose the spend already made on earlier nodes —
+    db/repo.py's already_processed() docstring promises "a crashed run leaves no row
+    (or a row with verdict NULL)"; this proves the NULL-row half actually happens."""
+    import sqlite3
+
+    def _fake_extract_requirements_with_cost(state):
+        return {
+            "requirements": [],
+            "llm_calls": [
+                {"node": "extract_requirements", "model": "claude-haiku-4-5",
+                 "input_tokens": 100, "output_tokens": 50, "cache_read_tokens": 0,
+                 "cache_creation_tokens": 0, "cost_usd": 0.0012}
+            ],
+        }
+
+    def _fake_diagnose_crashes(state):
+        raise RuntimeError("diagnose failed: Invalid json output (stop_reason=max_tokens)")
+
+    monkeypatch.setattr(graph_mod, "extract_requirements", _fake_extract_requirements_with_cost)
+    monkeypatch.setattr(graph_mod, "diagnose", _fake_diagnose_crashes)
+    _isolate_db(monkeypatch, tmp_path)
+
+    try:
+        asyncio.run(graph_mod.run_many(["jd that crashes"], _skip_render=True))
+    except RuntimeError:
+        pass
+
+    with sqlite3.connect(graph_mod.settings.jobs_db_path) as conn:
+        row = conn.execute("SELECT verdict, tokens_in, tokens_out, cost_usd FROM runs").fetchone()
+
+    assert row is not None, "crashed run left no row at all"
+    verdict, tokens_in, tokens_out, cost_usd = row
+    assert verdict is None
+    assert tokens_in == 100
+    assert tokens_out == 50
+    assert cost_usd == 0.0012

@@ -67,15 +67,15 @@ def test_cover_letter_render_data_has_company_and_body() -> None:
 
 def test_render_documents_skips_compile_when_draft_unchanged(monkeypatch, tmp_path) -> None:
     """solution.md step 2: idempotent render — a second call with the same draft must
-    not re-invoke Typst, only re-run it when the draft actually changed."""
+    not re-invoke Chrome, only re-run it when the draft actually changed."""
     monkeypatch.setattr(render_mod, "OUT_DIR", tmp_path)
     calls: list[str] = []
 
-    def _fake_compile(source, output, sys_inputs, root):
-        calls.append(source)
-        __import__("pathlib").Path(output).write_bytes(b"%PDF-fake")
+    def _fake_html_to_pdf(html_path, pdf_path):
+        calls.append(str(html_path))
+        pdf_path.write_bytes(b"%PDF-fake")
 
-    monkeypatch.setattr(render_mod, "typst_compile", _fake_compile)
+    monkeypatch.setattr(render_mod, "_html_to_pdf", _fake_html_to_pdf)
 
     job = Job(id="job1", source="manual", title="T", jd_text="...")
     state = JobState(job=job, draft=_draft())

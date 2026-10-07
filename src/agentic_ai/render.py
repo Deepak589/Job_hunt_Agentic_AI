@@ -1,28 +1,62 @@
-"""render_documents — Typst PDF rendering (plan.md §3, §10).
+"""render_documents — HTML-to-PDF rendering via headless Chrome (plan.md §3, §10).
 
 Two data-building functions produce plain dicts matching the existing hand-written
-templates' shapes (`templates/cv_two_column.typ` already consumes exactly the CV shape
-below — it was hand-built from `data/cv_data.json`, which this function's output
-replaces on a per-job basis). Rendering itself calls the `typst` PyPI package's
-`compile()` — no shell binary, no subprocess.
+templates' shapes (`templates/cv_two_column.html` consumes exactly the CV shape below).
+Rendering fills the Jinja2 template, writes it to a temp HTML file, then shells out to
+Chrome/Chromium `--headless --print-to-pdf` — same approach as the Job_finder repo's
+render_cv.sh, ported in so both CV pipelines render the same way.
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
 import re
+import shutil
+import subprocess
 import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from typst import compile as typst_compile
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from .config import ROOT, settings
+from .config import ROOT
 from .profile import Profile
 from .state import Draft, Job, JobState
 
 OUT_DIR = ROOT / "out"
+TEMPLATES_DIR = ROOT / "templates"
+
+_CHROME_CANDIDATES = [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+]
+
+
+def _find_chrome() -> str:
+    for path in _CHROME_CANDIDATES:
+        if Path(path).exists():
+            return path
+    for name in ("chromium", "google-chrome"):
+        found = shutil.which(name)
+        if found:
+            return found
+    raise RuntimeError("No Chrome/Chromium found — install one or set CHROME env var")
+
+
+_jinja_env = Environment(
+    loader=FileSystemLoader(str(TEMPLATES_DIR)),
+    autoescape=select_autoescape(["html"]),  # JD/company text is attacker-influenced input
+)
+
+
+def _html_to_pdf(html_path: Path, pdf_path: Path) -> None:
+    chrome = _find_chrome()
+    subprocess.run(
+        [chrome, "--headless", "--no-sandbox", "--disable-gpu", "--no-pdf-header-footer",
+         f"--print-to-pdf={pdf_path}", f"file://{html_path}"],
+        check=True, capture_output=True,
+    )
 
 
 def _slugify(text: str) -> str:
@@ -88,7 +122,7 @@ def build_cv_render_data(draft: Draft, profile: Profile) -> dict:
     return {
         "name": identity["name"].upper(),
         "tagline": identity.get("tagline_keywords", []),
-        "photo": "assets/photo.jpg",
+        "photo": "assets/photo.jpg",  # kept for data-shape compat; render_documents resolves the real file:// URI separately
         "contact": [
             ["mail", identity["email"]], ["phone", identity["phone"]],
             ["pin", identity["location"]], ["link", identity["github"]],
@@ -149,38 +183,28 @@ def render_documents(state: JobState) -> dict:
             "notes": [f"render skipped (draft unchanged) for {job_dir}"],
         }
 
+    photo_uri = f"file://{TEMPLATES_DIR / 'assets' / 'photo.jpg'}"
     cv_data = build_cv_render_data(state.draft, profile)
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-        json.dump(cv_data, f, indent=2)
-        cv_json_path = Path(f.name)
+    cv_html = _jinja_env.get_template("cv_two_column.html").render(d=cv_data, photo_uri=photo_uri)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False) as f:
+        f.write(cv_html)
+        cv_html_path = Path(f.name)
     try:
-        # root="/" — Typst treats any leading-"/" path (including our absolute OS paths
-        # passed via sys_inputs) as root-relative, so root must be the real filesystem
-        # root for an absolute sys_inputs path to resolve to itself rather than being
-        # re-prefixed onto some other root. Template-relative assets (e.g. "assets/photo.jpg",
-        # no leading slash) are unaffected — those resolve relative to the .typ file itself.
-        typst_compile(
-            str(settings.prompts_dir.parent / "templates" / "cv_two_column.typ"),
-            output=str(cv_pdf),
-            sys_inputs={"data": str(cv_json_path)},
-            root="/",
-        )
+        _html_to_pdf(cv_html_path, cv_pdf)
     finally:
-        cv_json_path.unlink()
+        cv_html_path.unlink()
 
     letter_data = build_cover_letter_render_data(state.draft, profile, state.job)
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-        json.dump(letter_data, f, indent=2)
-        letter_json_path = Path(f.name)
+    letter_html = _jinja_env.get_template("cover_letter.html").render(
+        d=letter_data, today=datetime.today().strftime("%B %-d, %Y")
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False) as f:
+        f.write(letter_html)
+        letter_html_path = Path(f.name)
     try:
-        typst_compile(
-            str(settings.prompts_dir.parent / "templates" / "cover_letter.typ"),
-            output=str(letter_pdf),
-            sys_inputs={"data": str(letter_json_path)},
-            root="/",
-        )
+        _html_to_pdf(letter_html_path, letter_pdf)
     finally:
-        letter_json_path.unlink()
+        letter_html_path.unlink()
 
     sha_path.write_text(draft_hash)
     return {

@@ -26,7 +26,7 @@ def _prompt() -> str:
 def _model():
     # claude-sonnet-5 rejects an explicit `temperature` — the param is deprecated for
     # this model (confirmed live: "`temperature` is deprecated for this model").
-    return make_structured(settings.rewrite_model, Draft, max_tokens=8192)
+    return make_structured(settings.rewrite_model, Draft, max_tokens=16384)
 
 
 def _profile_bullets_json(profile: Profile) -> str:

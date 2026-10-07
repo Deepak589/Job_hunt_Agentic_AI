@@ -52,7 +52,7 @@ class Requirement(BaseModel):
     keywords: list[str] = []
     evidence: list[Evidence] = []  # filled by retrieve_evidence
     covered: bool = False  # filled by score_coverage
-    covered_by: Literal["semantic", "keyword", None] = None  # which signal fired
+    covered_by: Literal["semantic", "keyword", "llm", None] = None  # which signal fired
     matched_term: str = ""  # the profile term a keyword hit matched; "" for semantic
     # A personal fact the profile simply does not record — a semester count, a grade
     # average. Absent evidence is not counter-evidence: treating it as failed skipped a
@@ -178,7 +178,12 @@ class JobState(BaseModel):
         return [r for r in self.requirements if r.type == "soft"]
 
     def uncovered_hard(self) -> list[Requirement]:
-        return [r for r in self.hard() if not r.covered]
+        """A hard requirement flagged `unknown` by `judge_requirements` (a named tech/skill
+        the profile neither confirms nor contradicts) is a question, not a confirmed gap —
+        excluded here the same way `unmet_disqualifiers` already excludes an unknown
+        disqualifier. Counting it here would silently defeat the point of asking instead
+        of guessing: `hard_gap_gate` would skip on it exactly as it would a real gap."""
+        return [r for r in self.hard() if not r.covered and not r.unknown]
 
     def unmet_disqualifiers(self) -> list[Requirement]:
         """Disqualifiers block only when uncovered.

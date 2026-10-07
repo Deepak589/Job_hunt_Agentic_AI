@@ -101,25 +101,30 @@ def test_no_requirements_of_a_type_scores_one() -> None:
 # ------------------------------------------------------------------------- the gate
 
 
-def test_single_hard_gap_proceeds() -> None:
-    """MAX_BLOCKING_HARD_GAPS starts at 1 — one gap is a rewrite problem, not a skip."""
+def test_few_hard_gaps_proceed() -> None:
+    """MAX_BLOCKING_HARD_GAPS is 3 — judge_requirements gives each uncovered hard gap an
+    LLM second opinion before it ever reaches this count, so the budget can afford to be
+    looser than a single gap."""
     s = scored(
         req("Python", keywords=["python"], similarity=BELOW),
         req("Rust", keywords=["rust"], similarity=BELOW),
+        req("Scala data platform", keywords=["scala"], similarity=BELOW),
     )
     assert hard_gap_gate(s) == "proceed"
     assert gate_reason(s) is None
 
 
-def test_two_hard_gaps_skip_and_name_them() -> None:
+def test_too_many_hard_gaps_skip_and_name_them() -> None:
     s = scored(
         req("4+ years of Rust", keywords=["rust"], similarity=BELOW),
         req("Scala data platform", keywords=["scala"], similarity=BELOW),
+        req("Go microservices", keywords=["go"], similarity=BELOW),
+        req("Elixir/Erlang", keywords=["elixir"], similarity=BELOW),
         req("Python", keywords=["python"], similarity=BELOW),
     )
     assert hard_gap_gate(s) == "skip"
     reason = gate_reason(s)
-    assert "Rust" in reason and "Scala" in reason
+    assert "Rust" in reason and "Scala" in reason and "Go" in reason and "Elixir" in reason
     assert "Python" not in reason, "covered requirements must not appear in the skip reason"
 
 
@@ -158,7 +163,7 @@ def test_disqualifier_skips_even_when_everything_else_is_covered() -> None:
     assert hard_gap_gate(s) == "skip", "a disqualifier is categorical, not outweighed by coverage"
 
 
-@pytest.mark.parametrize("n_gaps,expected", [(0, "proceed"), (1, "proceed"), (2, "skip"), (5, "skip")])
+@pytest.mark.parametrize("n_gaps,expected", [(0, "proceed"), (3, "proceed"), (4, "skip"), (7, "skip")])
 def test_gate_respects_max_blocking_hard_gaps(n_gaps: int, expected: str) -> None:
     reqs = [req(f"Unknown tech {i}", keywords=[f"unobtainium{i}"], similarity=BELOW) for i in range(n_gaps)]
     reqs.append(req("Python", keywords=["python"], similarity=BELOW))

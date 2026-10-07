@@ -25,11 +25,13 @@ the honest status.
 
 ## What to do
 
-1. Reorder and select bullets per the given `section_order` — do not invent an order.
-2. For each section, pick the bullets from the profile that best answer this JD's hard
-   requirements first, matched requirements second. Do not use every bullet in the
-   profile — 3-5 strong bullets per section beats 8 generic ones.
-3. Surface any project from `diagnosis.matches` that is not already prominent.
+1. Reorder bullets per the given `section_order` — do not invent an order.
+2. Include every bullet from every experience entry and every project in the profile —
+   do not drop a project or an experience entry, and do not drop a bullet within one.
+   Order bullets within each project/experience so the ones that best answer this JD's
+   hard requirements come first; rewrite the wording per the X-Y-Z formula, but the set
+   of bullets included must match the full profile.
+3. Surface every project from `diagnosis.matches`, in addition to all the others.
 4. Write a profile line (2-3 sentences) that leads with what THIS JD rewards.
 5. Write a cover letter: reference the company and role by name, the 2-3 most relevant
    projects/experience, why Germany / this company, and current availability

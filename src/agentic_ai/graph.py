@@ -2,6 +2,8 @@
 
     load_job -> extract_requirements -> retrieve_evidence -> score_coverage
                                                                  |
+                                                     judge_requirements
+                                                                 |
                                        hard_gap_gate --skip--> log_skip -> END
                                                  \\--proceed
                                                         v
@@ -66,6 +68,7 @@ from .config import settings
 from .coverage import hard_gap_gate, log_skip, retrieve_evidence, score_coverage
 from .nodes.diagnose import diagnose
 from .nodes.hiring_manager import hiring_manager
+from .nodes.judge_requirements import judge_requirements
 from .nodes.recruiter_sim import log_recruiter_fail, recruiter_gate, recruiter_sim
 from .nodes.requirements import extract_requirements
 from .nodes.review import review, review_gate
@@ -141,6 +144,7 @@ def build_graph(skip_render: bool = False, checkpointer=None, review_pause: bool
     g.add_node("extract_requirements", extract_requirements)
     g.add_node("retrieve_evidence", retrieve_evidence)
     g.add_node("score_coverage", score_coverage)
+    g.add_node("judge_requirements", judge_requirements)
     g.add_node("log_skip", log_skip)
     g.add_node("diagnose", diagnose)
     g.add_node("rewrite", rewrite)
@@ -157,8 +161,9 @@ def build_graph(skip_render: bool = False, checkpointer=None, review_pause: bool
     g.add_edge("load_job", "extract_requirements")
     g.add_edge("extract_requirements", "retrieve_evidence")
     g.add_edge("retrieve_evidence", "score_coverage")
+    g.add_edge("score_coverage", "judge_requirements")
     g.add_conditional_edges(
-        "score_coverage", hard_gap_gate, {"skip": "log_skip", "proceed": "diagnose"}
+        "judge_requirements", hard_gap_gate, {"skip": "log_skip", "proceed": "diagnose"}
     )
     g.add_edge("log_skip", END)
     g.add_edge("diagnose", "rewrite")
@@ -214,6 +219,28 @@ def _build_job(jd_text: str, title: str, company: str, job_fields: dict) -> Job:
     )
 
 
+async def _invoke_tracked(graph, initial_state: JobState, config: dict) -> JobState:
+    """`graph.ainvoke`, but on any exception persists whatever cost the checkpointer
+    already captured before re-raising — Anthropic bills per call made, not per run
+    completed, so a crash on e.g. `rewrite` must not lose the llm_calls spent on
+    `extract_requirements`/`diagnose`/`judge_requirements` before it. `db/repo.py`'s
+    `already_processed` docstring already promised this ("a crashed run leaves no row
+    (or a row with verdict NULL)") — this is that NULL-row half, previously missing."""
+    try:
+        result = await graph.ainvoke(initial_state, config=config, durability="sync")
+        return JobState.model_validate(result)
+    except Exception as exc:
+        from .db.repo import persist_run
+
+        snapshot = await graph.aget_state(config)
+        if snapshot.values:
+            crashed_state = JobState.model_validate(
+                {**snapshot.values, "skip_reason": snapshot.values.get("skip_reason") or f"crashed: {exc}"}
+            )
+            persist_run(crashed_state)
+        raise
+
+
 async def _run(jd_text: str, title: str, company: str, job_fields: dict) -> JobState:
     skip_render = job_fields.pop("_skip_render", False)
     prefill = job_fields.pop("_prefill", None) or {}
@@ -221,8 +248,7 @@ async def _run(jd_text: str, title: str, company: str, job_fields: dict) -> JobS
     async with _open_checkpointer() as saver:
         graph = build_graph(skip_render=skip_render, checkpointer=saver)
         config = {"configurable": {"thread_id": job.id}, "callbacks": _tracing_callbacks()}
-        result = await graph.ainvoke(JobState(job=job, **prefill), config=config, durability="sync")
-    return JobState.model_validate(result)
+        return await _invoke_tracked(graph, JobState(job=job, **prefill), config)
 
 
 def run(jd_text: str, title: str = "", company: str = "", **job_fields) -> JobState:
@@ -290,8 +316,7 @@ async def run_many(jd_texts: list[str], **shared_job_fields) -> list[JobState]:
 
             config = {"configurable": {"thread_id": job.id}, "callbacks": config_callbacks}
             try:
-                result = await graph.ainvoke(JobState(job=job, **prefill), config=config, durability="sync")
-                state = JobState.model_validate(result)
+                state = await _invoke_tracked(graph, JobState(job=job, **prefill), config)
             except Exception:
                 await guard.release(est_cost)
                 raise
