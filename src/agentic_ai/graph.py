@@ -390,6 +390,32 @@ def get_paused_state(job_id_: str) -> JobState:
     return asyncio.run(_get_paused_state(job_id_))
 
 
+async def _list_pending_review_ids() -> list[str]:
+    import sqlite3
+
+    if not settings.checkpoint_db_path.exists():
+        return []
+    with sqlite3.connect(settings.checkpoint_db_path) as conn:
+        thread_ids = [row[0] for row in conn.execute("SELECT DISTINCT thread_id FROM checkpoints")]
+
+    pending: list[str] = []
+    async with _open_checkpointer() as saver:
+        probe = build_graph(skip_render=False, checkpointer=saver, review_pause=True)
+        for tid in thread_ids:
+            config = {"configurable": {"thread_id": tid}}
+            snapshot = await probe.aget_state(config)
+            if snapshot.values and "human_review" in snapshot.next:
+                pending.append(tid)
+    return pending
+
+
+def list_pending_review_ids() -> list[str]:
+    """Job ids currently paused at `human_review`. No `jobs` row exists for a paused
+    job (`persist_run` only runs once `review()`/`resume()` finishes one) so this scans
+    `checkpoints.db`'s thread ids directly instead of `jobpilot.db`."""
+    return asyncio.run(_list_pending_review_ids())
+
+
 async def _resume(job_id_: str) -> JobState:
     async with _open_checkpointer() as saver:
         config = {"configurable": {"thread_id": job_id_}, "callbacks": _tracing_callbacks()}
