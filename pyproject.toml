@@ -33,6 +33,7 @@ dependencies = [
     "typer>=0.15",
     "rich>=13.9",
     "python-dotenv>=1.2.3",
+    "mcp>=1.2,<2",
 ]
 
 [project.optional-dependencies]
@@ -50,6 +51,7 @@ dev = [
 
 [project.scripts]
 jobpilot = "agentic_ai.cli:app"
+jobpilot-mcp = "agentic_ai.mcp.server:main"
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
