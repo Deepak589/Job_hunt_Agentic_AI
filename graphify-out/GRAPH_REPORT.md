@@ -1,16 +1,16 @@
-# Graph Report - Agentic_ai  (2026-10-05)
+# Graph Report - Agentic_ai  (2026-10-07)
 
 ## Corpus Check
-- 124 files · ~118,286 words
+- 136 files · ~130,924 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1522 nodes · 2830 edges · 132 communities (123 shown, 9 thin omitted)
-- Extraction: 90% EXTRACTED · 10% INFERRED · 0% AMBIGUOUS · INFERRED: 282 edges (avg confidence: 0.59)
+- 1640 nodes · 2959 edges · 149 communities (135 shown, 14 thin omitted)
+- Extraction: 90% EXTRACTED · 10% INFERRED · 0% AMBIGUOUS · INFERRED: 283 edges (avg confidence: 0.59)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c249c716`
+- Built from commit: `a4b9dbda`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -142,18 +142,34 @@
 - [[_COMMUNITY_Community 128|Community 128]]
 - [[_COMMUNITY_Community 129|Community 129]]
 - [[_COMMUNITY_Community 130|Community 130]]
+- [[_COMMUNITY_Community 132|Community 132]]
+- [[_COMMUNITY_Community 133|Community 133]]
+- [[_COMMUNITY_Community 134|Community 134]]
+- [[_COMMUNITY_Community 135|Community 135]]
+- [[_COMMUNITY_Community 136|Community 136]]
+- [[_COMMUNITY_Community 137|Community 137]]
+- [[_COMMUNITY_Community 138|Community 138]]
+- [[_COMMUNITY_Community 139|Community 139]]
+- [[_COMMUNITY_Community 140|Community 140]]
+- [[_COMMUNITY_Community 141|Community 141]]
+- [[_COMMUNITY_Community 142|Community 142]]
+- [[_COMMUNITY_Community 143|Community 143]]
+- [[_COMMUNITY_Community 144|Community 144]]
+- [[_COMMUNITY_Community 145|Community 145]]
+- [[_COMMUNITY_Community 146|Community 146]]
+- [[_COMMUNITY_Community 147|Community 147]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `JobState` - 58 edges
 2. `Job` - 55 edges
-3. `Profile` - 49 edges
+3. `Profile` - 50 edges
 4. `scored()` - 39 edges
 5. `BaseModel` - 37 edges
 6. `req()` - 36 edges
 7. `Draft` - 34 edges
 8. `Requirement` - 29 edges
-9. `make_structured()` - 27 edges
-10. `invoke_structured()` - 27 edges
+9. `make_structured()` - 28 edges
+10. `invoke_structured()` - 28 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Profile` --uses--> `Profile`  [INFERRED]
@@ -171,63 +187,63 @@
 - 1-file cycle: `src/agentic_ai/budget.py -> src/agentic_ai/budget.py`
 - 1-file cycle: `src/agentic_ai/db/repo.py -> src/agentic_ai/db/repo.py`
 
-## Communities (132 total, 9 thin omitted)
+## Communities (149 total, 14 thin omitted)
 
 ### Community 0 - "Community 0"
-Cohesion: 0.16
-Nodes (18): gate_reason(), hard_gap_gate(), Why this job is a skip, or None to proceed. Pure — the routing fn wraps it., Conditional edge: 'skip' or 'proceed'., MAX_BLOCKING_HARD_GAPS is 3 — judge_requirements gives each uncovered hard gap a, The profile lists German at A1/A2 and never_claim forbids claiming fluency., The profile lists German at A1/A2 and never_claim forbids claiming fluency., German is recorded — A1/A2. That is a fact, not a blank, and it still skips. (+10 more)
+Cohesion: 0.15
+Nodes (20): gate_reason(), hard_gap_gate(), log_skip(), Why this job is a skip, or None to proceed. Pure — the routing fn wraps it., Conditional edge: 'skip' or 'proceed'., JobState, MAX_BLOCKING_HARD_GAPS is 3 — judge_requirements gives each uncovered hard gap a, The profile lists German at A1/A2 and never_claim forbids claiming fluency. (+12 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.06
-Nodes (62): _blocked_language(), _eligibility_terms(), _is_onsite(), _is_unrecorded_fact(), _keyword_hit(), _location_reachable(), location_terms(), log_skip() (+54 more)
+Cohesion: 0.07
+Nodes (60): _blocked_language(), _eligibility_terms(), _is_onsite(), _is_unrecorded_fact(), _keyword_hit(), keyword_set(), _location_reachable(), location_terms() (+52 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.14
-Nodes (11): Batch-mode processing for every survivor (solution.md step 7)., One survivor through the full pipeline via `run_many`, persisted, folded into, _run_batch(), _run_one_live(), A hard requirement flagged `unknown` by `judge_requirements` (a named tech/skill, Disqualifiers block only when uncovered.          "Requires C1 German" with no G, Disqualifiers block only when uncovered.          "Requires C1 German" with no G, Disqualifiers the profile holds no fact for. Answerable only by Deepak. (+3 more)
+Cohesion: 0.11
+Nodes (22): add(), _check_budget(), _edit_draft(), profile_init(), Run one job description through the gap report., Run one job description through the gap report., Open `draft` as YAML in $EDITOR; re-parse into a Draft. Returns None if the user, Open `draft` as YAML in $EDITOR; re-parse into a Draft. Returns None if the user (+14 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.10
-Nodes (46): AtsScore, AtsVerdict, ats_score(), _frac(), gates_failed(), parse_pdf(), ParsedPdf, ats_score — the deterministic, computed ATS score (plan.md §6, CLAUDE.md ATS Sco (+38 more)
+Cohesion: 0.09
+Nodes (49): AtsScore, plan.md §6. Counts first, arithmetic second — a score with no fact table under i, AtsScore, AtsVerdict, ats_score(), _frac(), gates_failed(), parse_pdf() (+41 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.21
-Nodes (15): fact_gate(), log_fact_failure(), A draft that never passed fact-checking must not reach render_documents., A draft that never passed fact-checking must not reach render_documents., JobState, Routing logic for the diagnose->rewrite->validate_facts->review loop, tested wit, Ship the best version and flag the weakness — never loop forever (CLAUDE.md)., _state() (+7 more)
+Cohesion: 0.13
+Nodes (23): Scores, retry' back to rewrite (attempts remain and score is low), else 'proceed'., review_gate(), fact_gate(), log_fact_failure(), A draft that never passed fact-checking must not reach render_documents., A draft that never passed fact-checking must not reach render_documents., JobState (+15 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.05
-Nodes (49): index_build(), index_calibrate(), (Re)build the evidence store from master_profile.yaml., Measure SEM_THRESHOLD against the hand-labeled probes., build_index(), calibrate(), _client(), embed() (+41 more)
+Cohesion: 0.13
+Nodes (27): build_index(), calibrate(), _client(), embed(), _embedder(), get_collection(), Evidence store — per-bullet retrieval over the master profile (plan.md §5.2).  C, Top-k bullets for each query, most similar first. One batched encode, one query. (+19 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.14
-Nodes (26): build_profile_dict(), _bullet_dict(), _duration_years(), _education_model(), _experience_model(), extract(), _extract_pdf_text(), ExtractedBullet (+18 more)
+Cohesion: 0.18
+Nodes (15): _education_model(), _experience_model(), extract(), _identity_model(), _languages_model(), _projects_model(), 6 focused calls, not 1 — Anthropic's structured-output schema complexity limit, The model sometimes HTML-escapes '&' as '&amp;' in structured output even     th (+7 more)
 
 ### Community 7 - "Community 7"
-Cohesion: 0.12
-Nodes (25): BatchClient, BatchRequest, _node_from_custom_id(), BatchClient — Anthropic Batches API for the nightly queue (solution.md step 7)., Anthropic's Batches API is documented at 50% of the standard per-token rate, Thin wrapper over `anthropic.Anthropic().messages.batches`. Anthropic-only by, Blocks until `processing_status == "ended"`. Raises `TimeoutError` past, `{custom_id: {"parsed": <schema instance|None>, "usage": <dict|None>, "error": < (+17 more)
+Cohesion: 0.06
+Nodes (46): BatchClient, BatchRequest, _node_from_custom_id(), BatchClient — Anthropic Batches API for the nightly queue (solution.md step 7)., Anthropic's Batches API is documented at 50% of the standard per-token rate, Thin wrapper over `anthropic.Anthropic().messages.batches`. Anthropic-only by, Blocks until `processing_status == "ended"`. Raises `TimeoutError` past, `{custom_id: {"parsed": <schema instance|None>, "usage": <dict|None>, "error": < (+38 more)
 
 ### Community 8 - "Community 8"
 Cohesion: 0.10
-Nodes (32): add(), _check_budget(), _edit_draft(), _log_event(), _log_run(), _print_jobs_table(), profile_check(), profile_init() (+24 more)
+Nodes (26): cost(), _log_event(), _log_run(), outcome(), _print_jobs_table(), profile_check(), jobpilot CLI.      jobpilot add --file jd.txt        run a JD through the full 5, Continue a job whose process crashed mid-run (§2 durability) — picks up from the (+18 more)
 
 ### Community 9 - "Community 9"
 Cohesion: 0.06
 Nodes (33): Deepak589/cloudnotes/README.md, content, sha, Deepak589/Job_hunt_Agentic_AI/docs/solution.md, content, sha, Deepak589/Job_hunt_Agentic_AI/docs/system_design_review_2026-09-18.md, content (+25 more)
 
 ### Community 10 - "Community 10"
-Cohesion: 0.10
-Nodes (24): expand_metric_tokens(), The hand-listed `allowed_metrics`. A cached render of the bullets, not truth., Every numeric token a generated bullet may legitimately print.          Derived, Drift between the bullets and the cached `allowed_metrics` list.          Return, Every numeric surface form a set of declared metrics legitimises.      Metric st, profile(), Profile loader, metric expansion, and yaml integrity.  The metric tests are the, A typo in a skill's evidence list silently breaks retrieval — it must error. (+16 more)
+Cohesion: 0.15
+Nodes (19): profile(), Profile loader, metric expansion, and yaml integrity.  The metric tests are the, A typo in a skill's evidence list silently breaks retrieval — it must error., Guards against a silent yaml truncation or a mis-parsed section., never_claim depends on this status surviving the load., A bullet printing "60%" must match whether the figure is declared bare or suffix, alpha 0.3/0.5/0.7/0.9" must yield four tokens, not one mangled "0.3/0"., allowed_metrics is a render of the bullets; the bullets are the authority. (+11 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.08
-Nodes (37): Output of the `recruiter_sim` node — role 4 (CLAUDE.md). Fast, shallow,     keyw, RecruiterResult, log_recruiter_fail(), recruiter_sim — deterministic keyword-literal ATS scan (plan.md §7, CLAUDE.md ro, Deterministic literal-keyword screen. Only checks requirements the pipeline, hard_fail' skips before render — CLAUDE.md role 4: "Hard-fail = don't recommend, A draft the recruiter screen would hard-fail must not reach render_documents., recruiter_gate() (+29 more)
+Cohesion: 0.24
+Nodes (14): log_recruiter_fail(), recruiter_sim — deterministic keyword-literal ATS scan (plan.md §7, CLAUDE.md ro, Deterministic literal-keyword screen. Only checks requirements the pipeline, A draft the recruiter screen would hard-fail must not reach render_documents., recruiter_sim(), _rendered_cv_text(), JobState, Requirement (+6 more)
 
 ### Community 12 - "Community 12"
-Cohesion: 0.15
-Nodes (18): build_graph(), _get_paused_state(), _open_checkpointer(), One `AsyncSqliteSaver` per call, WAL mode — concurrent `ainvoke`s (run_many) nee, One `AsyncSqliteSaver` per call, WAL mode — concurrent `ainvoke`s (run_many) nee, Like `run()`, but pauses at `human_review` (§9) — nothing is written to disk unt, Like `run()`, but pauses at `human_review` (§9) — nothing is written to disk unt, Resume a job paused by `run_for_review` (or paused again after an "edit" loops (+10 more)
+Cohesion: 0.09
+Nodes (39): estimated_job_cost(), Rolling average cost of a past run, as the estimate for one not-yet-run job., build_graph(), _build_job(), _get_paused_state(), human_review(), human_review_gate(), _invoke_tracked() (+31 more)
 
 ### Community 13 - "Community 13"
-Cohesion: 0.13
-Nodes (23): _has_cache_control(), invoke_structured(), make_llm(), Shared ChatAnthropic factory. langchain_anthropic's ChatAnthropic already forwar, True if any message block in this call actually set `cache_control` — messages, Call a `make_structured` runnable, recording usage for every call made (a retrie, Any, ChatAnthropic (+15 more)
+Cohesion: 0.17
+Nodes (18): invoke_structured(), make_llm(), Call a `make_structured` runnable, recording usage for every call made (a retrie, ChatAnthropic, _FakeStructured, llm.make_llm — shared ChatAnthropic factory. Proves `Settings.llm_max_retries` i, Stands in for a `make_structured(...)` runnable — `.invoke()` returns the next, solution.md step 5: retry only when the response was cut off or refused. (+10 more)
 
 ### Community 14 - "Community 14"
 Cohesion: 0.07
@@ -238,24 +254,24 @@ Cohesion: 0.08
 Nodes (24): Bugs found and fixed while building, Carried into Phase 3 (per plan.md §16), Dead-state cleanup + retry-cache — fixed 2026-09-16, Done means, Fixed in the final whole-branch review pass, Known items carried forward (real findings, not hypothetical), Open, carried into Phase 2, Phase 1 — core loop, manual JD input (+16 more)
 
 ### Community 16 - "Community 16"
-Cohesion: 0.12
-Nodes (28): applied(), cost(), outcome(), Record that job_id's tailored CV was sent. Reads the rendered draft's hash from, Record what happened after applying. Run 'jobpilot applied <id>' first., Spend summary from the runs ledger — per day and all-time., already_processed(), cost_summary() (+20 more)
+Cohesion: 0.14
+Nodes (25): applied(), Record that job_id's tailored CV was sent. Reads the rendered draft's hash from, Record that job_id's tailored CV was sent. Reads the rendered draft's hash from, already_processed(), cost_summary(), get_company_snapshot(), get_job(), init_db() (+17 more)
 
 ### Community 17 - "Community 17"
-Cohesion: 0.22
-Nodes (10): Shared sourcing contract + small helpers reused across connectors (solution.md s, Same pattern as arbeitnow.py's `_strip_html` — shared here since 4 new     conne, strip_html(), fetch_jobs(), Greenhouse Job Board API ingestion — public, no auth (solution.md step 6).  Shap, _employment_type(), fetch_jobs(), Lever public postings API ingestion — no auth (solution.md step 6).  Shape per L (+2 more)
+Cohesion: 0.13
+Nodes (19): job_id(), Identifies the POSTING, not the text (solution.md step 1): same source+url fetch, Identifies the POSTING, not the text (solution.md step 1): same source+url fetch, Typed state threaded through tailor_graph (plan.md §2).  Phase 1 fields only. `D, validate_facts graph node — thin wrapper over validators.facts (plan.md §3, §8)., _employment_type(), fetch_jobs(), Ashby Job Board API ingestion — public, no auth (solution.md step 6).  Shape per (+11 more)
 
 ### Community 18 - "Community 18"
 Cohesion: 0.25
 Nodes (12): diff_edited_bullets(), New/changed bullet texts in `new` vs `old`, matched by source_bullet_id (a human, Draft, _draft(), _job_state(), Procedural memory from review edits (plan.md §21.4, solution.md step 8)., _rewrite_common_mocks(), test_diff_edited_bullets_finds_changed_and_ignores_unchanged() (+4 more)
 
 ### Community 19 - "Community 19"
-Cohesion: 0.09
-Nodes (31): load_preferences(), Empty list if the file doesn't exist — a fresh install has none yet., classify_role(), _model(), _prompt(), Role classification + deterministic section order (plan.md §7, CLAUDE.md Section, classify_role — which of the four CLAUDE.md role archetypes this JD is., Cached by jd_text — a review/fact-validation retry re-invokes rewrite for the (+23 more)
+Cohesion: 0.10
+Nodes (26): load_preferences(), Procedural memory from review edits (plan.md §21.4, solution.md step 8) — scoped, Append+dedupe into data/preferences.yaml. Creates the file if absent., Empty list if the file doesn't exist — a fresh install has none yet., record_preferences(), classify_role(), _model(), _prompt() (+18 more)
 
 ### Community 20 - "Community 20"
-Cohesion: 0.06
-Nodes (39): Diagnosis, HiringManagerVerdict, Output of the `hiring_manager` node — role 5 (CLAUDE.md). The "could you defend, Output of the `diagnose` node — line-by-line CV vs JD (plan.md §7.1)., ExtractedRequirement, One requirement as stated in the JD.      Deliberately narrower than `state.Requ, emit_requirements — every requirement stated in the job description., RequirementList (+31 more)
+Cohesion: 0.05
+Nodes (49): HiringManagerVerdict, Output of the `recruiter_sim` node — role 4 (CLAUDE.md). Fast, shallow,     keyw, Output of the `hiring_manager` node — role 5 (CLAUDE.md). The "could you defend, RecruiterResult, hard_fail' skips before render — CLAUDE.md role 4: "Hard-fail = don't recommend, recruiter_gate(), ExtractedRequirement, One requirement as stated in the JD.      Deliberately narrower than `state.Requ (+41 more)
 
 ### Community 21 - "Community 21"
 Cohesion: 0.19
@@ -266,8 +282,8 @@ Cohesion: 0.35
 Nodes (10): persist_run(), Upsert the job row, insert one run row. Returns the new run_id., JobState, jobs/runs cost ledger (plan.md §11-12, Phase 3)., _state(), test_cost_summary_since_filters_out_older_runs(), test_cost_summary_totals_and_buckets_by_day(), test_persist_run_records_skip_reason_and_recruiter_result() (+2 more)
 
 ### Community 23 - "Community 23"
-Cohesion: 0.20
-Nodes (17): build_cover_letter_render_data(), build_cv_render_data(), _draft_hash(), _find_chrome(), _fmt_month(), _html_to_pdf(), job_dir_name(), render_documents — HTML-to-PDF rendering via headless Chrome (plan.md §3, §10). (+9 more)
+Cohesion: 0.15
+Nodes (21): build_cv_render_data(), _draft_hash(), _find_chrome(), _fmt_month(), _html_to_pdf(), job_dir_name(), render_documents — HTML-to-PDF rendering via headless Chrome (plan.md §3, §10)., Human-readable output folder name — company-title-<first 8 hex of job.id>. (+13 more)
 
 ### Community 24 - "Community 24"
 Cohesion: 0.12
@@ -278,12 +294,12 @@ Cohesion: 0.18
 Nodes (14): _isolate_db(), _patch_llm_nodes(), graph.run_many — concurrent multi-JD execution (§ jobpilot add --dir). Every LLM, solution.md step 1: the cap check reads persisted + in-flight-RESERVED spend, so, A node raising mid-graph (e.g. the real max_tokens parse failures seen in     ju, run_many now checks already_processed()/BudgetGuard against settings.jobs_db_pat, All 6 LLM-calling nodes route through ChatAnthropic; monkeypatching the 4 that, solution.md step 1: re-running the same JD text (same content-hash job id)     m (+6 more)
 
 ### Community 26 - "Community 26"
-Cohesion: 0.38
-Nodes (6): _employment_type(), fetch_jobs(), MissingCredentialsError, Adzuna job-board ingestion — REST API, requires ADZUNA_APP_ID/ADZUNA_APP_KEY.  N, ADZUNA_APP_ID / ADZUNA_APP_KEY not set., Job
+Cohesion: 0.19
+Nodes (12): _employment_type(), fetch_jobs(), MissingCredentialsError, Adzuna job-board ingestion — REST API, requires ADZUNA_APP_ID/ADZUNA_APP_KEY.  N, ADZUNA_APP_ID / ADZUNA_APP_KEY not set., _employment_type(), fetch_jobs(), MissingCredentialsError (+4 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.15
-Nodes (29): _build_job(), Procedural memory from review edits (plan.md §21.4, solution.md step 8) — scoped, AtsScore, Draft, DraftBullet, Job, JobState, Typed state threaded through tailor_graph (plan.md §2).  Phase 1 fields only. `D (+21 more)
+Cohesion: 0.19
+Nodes (25): build_cover_letter_render_data(), Draft, DraftBullet, Job, JobState, One rewritten bullet — the XYZ sentence plus what a validator can check it again, Output of the `rewrite` node (plan.md §7.2)., Draft (+17 more)
 
 ### Community 28 - "Community 28"
 Cohesion: 0.13
@@ -310,16 +326,16 @@ Cohesion: 0.09
 Nodes (21): 1. Diagnosis agent, 2. Rewriter agent, 3. Reviewer agent, 4. Cover Letter, 4. Recruiter agent (simulated first-pass screen), 5. Hiring manager agent (final verdict), Action Verbs by Category, Bad → Good Examples (+13 more)
 
 ### Community 34 - "Community 34"
-Cohesion: 0.25
-Nodes (10): BudgetExceeded, check_budget(), estimated_job_cost(), Daily spend cap (solution.md step 1). Two call sites:  - `check_budget()` — a pl, Today's persisted spend has already hit (or would exceed) the daily cap., Raise BudgetExceeded if today's persisted spend already hit the cap.     No-op w, Rolling average cost of a past run, as the estimate for one not-yet-run job., spent_today() (+2 more)
+Cohesion: 0.15
+Nodes (16): add_job(), get_applicant_profile(), get_job(), list_pending_reviews(), mark_applied(), Local stdio MCP server — lets Claude Desktop drive the jobpilot pipeline and han, Run a JD through the pipeline to the human_review checkpoint. Give either     jd, approve / edit / reject a job paused at human_review. `edits` (a Draft, same (+8 more)
 
 ### Community 35 - "Community 35"
-Cohesion: 0.22
-Nodes (13): judge_stats_cmd(), Cohen's kappa per judge node vs what the human actually did at review., cohens_kappa(), judge_stats(), Cohen's kappa per judge node vs human action (solution.md step 8). Pure Python —, review_score >= settings.min_review_score -> 'pass' else 'retry' (the judge-outp, po/pe/kappa over `pairs` = (judge_output, human_action). None if `pairs` is empt, Gate for `scoring/ats.py`'s review cap (solution.md step 9).      The cap holds (+5 more)
+Cohesion: 0.21
+Nodes (12): judge_stats_cmd(), Cohen's kappa per judge node vs what the human actually did at review., Cohen's kappa per judge node vs what the human actually did at review., cohens_kappa(), judge_stats(), Cohen's kappa per judge node vs human action (solution.md step 8). Pure Python —, review_score >= settings.min_review_score -> 'pass' else 'retry' (the judge-outp, po/pe/kappa over `pairs` = (judge_output, human_action). None if `pairs` is empt (+4 more)
 
 ### Community 36 - "Community 36"
-Cohesion: 0.10
-Nodes (11): Bullet, Profile, Loader + validation over data/master_profile.yaml (plan.md §5.1).  master_profil, Skill names, lowercased. The keyword half of the §6 two-signal match., Stack entries on experience/project records — tech not always in `skills`., Integrity errors in the yaml itself. Empty list = clean.          Catches what n, The text that gets embedded — outcome + metric + method (plan.md §5.2)., Every node in the graph calls this once per job — cache on (path, mtime_ns) (+3 more)
+Cohesion: 0.11
+Nodes (10): Bullet, Profile, Loader + validation over data/master_profile.yaml (plan.md §5.1).  master_profil, Skill names, lowercased. The keyword half of the §6 two-signal match., Stack entries on experience/project records — tech not always in `skills`., Integrity errors in the yaml itself. Empty list = clean.          Catches what n, The text that gets embedded — outcome + metric + method (plan.md §5.2)., Every node in the graph calls this once per job — cache on (path, mtime_ns) (+2 more)
 
 ### Community 37 - "Community 37"
 Cohesion: 0.17
@@ -330,12 +346,12 @@ Cohesion: 0.21
 Nodes (8): check_metrics(), check_never_claim(), check_skills(), cv_skill_tokens(), norm(), not_shipped bullets must not surface on the CV., Flatten CV skill strings into atoms, splitting parentheticals too., Every number the CV states must trace to a metric in master_profile.yaml.      E
 
 ### Community 39 - "Community 39"
-Cohesion: 0.11
-Nodes (19): EducationList, ExperienceList, ExtractedEducation, ExtractedExperience, ExtractedProject, ExtractedSkillCategory, Identity, LanguageSkill (+11 more)
+Cohesion: 0.09
+Nodes (33): build_profile_dict(), _bullet_dict(), _duration_years(), EducationList, ExperienceList, _extract_pdf_text(), ExtractedBullet, ExtractedEducation (+25 more)
 
 ### Community 40 - "Community 40"
-Cohesion: 0.18
-Nodes (18): JobState, Requirement, `fluent in german` reduces to `german`, which the language block still stops., `fluent in german` reduces to `german`, which the language block still stops., Mubea wrote "Ability to work regularly in Attendorn" — a presence demand in, Mubea wrote "Ability to work regularly in Attendorn" — a presence demand in, Absence of soft requirements is not a soft-coverage failure., req() (+10 more)
+Cohesion: 0.19
+Nodes (17): JobState, Requirement, Paraphrase cannot establish fluency either — the block precedes both signals., Paraphrase cannot establish fluency either — the block precedes both signals., java" must not be satisfied by "javascript" and vice versa.      Substring match, Absence of soft requirements is not a soft-coverage failure., req(), scored() (+9 more)
 
 ### Community 41 - "Community 41"
 Cohesion: 0.18
@@ -354,24 +370,20 @@ Cohesion: 0.20
 Nodes (9): 1. Cost / token accounting, 2. Latency / concurrency, 3. Persistence / resumability, 4. Guardrail gaps, 5. Five-role pipeline (Phase 3, plan.md §16) — DONE 2026-09-16, 6. Dead / unwired state, 7. Job sourcing, 8. Testing / eval gaps (+1 more)
 
 ### Community 45 - "Community 45"
-Cohesion: 0.31
-Nodes (9): diagnose(), _model(), _profile_brief(), _prompt(), diagnose — LLM call 2, Sonnet (plan.md §3, §7.1). Sees the full profile — unlike, Graph node. No-op if `state.diagnosis` is already populated (solution.md step 7, _requirements_brief(), JobState (+1 more)
+Cohesion: 0.13
+Nodes (13): Settings — thresholds, model ids, paths. Override any field via .env or environm, Settings, BaseSettings, diagnose(), _model(), _profile_brief(), _prompt(), diagnose — LLM call 2, Sonnet (plan.md §3, §7.1). Sees the full profile — unlike (+5 more)
 
 ### Community 46 - "Community 46"
 Cohesion: 0.20
 Nodes (9): Eval harness (regression detection for scoring/retrieval changes), JobPilot, Layout, Pipeline, Production fixes, Setup, Testing, Tracing (optional) (+1 more)
 
 ### Community 47 - "Community 47"
-Cohesion: 0.20
-Nodes (4): BudgetGuard, Reserves in-flight spend against the daily cap for one run_many() batch.      `p, Replace a job's reservation with its real cost once it finishes., Drop a reservation for a job that never ran (skipped, rejected).
+Cohesion: 0.14
+Nodes (12): BudgetExceeded, BudgetGuard, check_budget(), Daily spend cap (solution.md step 1). Two call sites:  - `check_budget()` — a pl, Today's persisted spend has already hit (or would exceed) the daily cap., Raise BudgetExceeded if today's persisted spend already hit the cap.     No-op w, Reserves in-flight spend against the daily cap for one run_many() batch.      `p, Replace a job's reservation with its real cost once it finishes. (+4 more)
 
 ### Community 48 - "Community 48"
-Cohesion: 0.31
-Nodes (8): _fetch_job_posting(), _jobposting_from_jsonld(), Fetch `url` and pull JD fields — JSON-LD JobPosting first (structured, reliable), Find a schema.org JobPosting among extruct's json-ld blocks, unwrapping @graph, _mock_response(), `jobpilot add --url` — JSON-LD JobPosting extraction, trafilatura fallback (solu, test_fetch_job_posting_extracts_jsonld_jobposting(), test_fetch_job_posting_falls_back_to_trafilatura_without_jsonld()
-
-### Community 49 - "Community 49"
-Cohesion: 0.13
-Nodes (6): Settings — thresholds, model ids, paths. Override any field via .env or environm, Settings, BaseSettings, Cohen's kappa per judge node (solution.md step 8)., test_judge_stats_from_recorded_rows(), Langfuse tracing is opt-in: no keys set -> no-op, no import, no network call.
+Cohesion: 0.24
+Nodes (10): _fetch_job_posting(), _jobposting_from_jsonld(), Fetch `url` and pull JD fields — JSON-LD JobPosting first (structured, reliable), Fetch `url` and pull JD fields — JSON-LD JobPosting first (structured, reliable), Find a schema.org JobPosting among extruct's json-ld blocks, unwrapping @graph, Find a schema.org JobPosting among extruct's json-ld blocks, unwrapping @graph, _mock_response(), `jobpilot add --url` — JSON-LD JobPosting extraction, trafilatura fallback (solu (+2 more)
 
 ### Community 50 - "Community 50"
 Cohesion: 0.22
@@ -382,8 +394,8 @@ Cohesion: 0.44
 Nodes (8): _insert_job(), _isolate_db(), jobpilot applied / jobpilot outcome (solution.md step 8)., test_applied_records_application_with_sha_when_render_exists(), test_applied_warns_when_no_render_found(), test_outcome_rejects_invalid_value(), test_outcome_updates_row_after_applied(), test_outcome_without_prior_applied_is_a_clean_error()
 
 ### Community 52 - "Community 52"
-Cohesion: 0.36
-Nodes (7): hiring_manager(), _model(), _profile_bullets_json(), _prompt(), hiring_manager — LLM call 6, Sonnet (plan.md §7, CLAUDE.md role 5). "Could you d, JobState, Profile
+Cohesion: 0.21
+Nodes (10): _has_cache_control(), Shared ChatAnthropic factory. langchain_anthropic's ChatAnthropic already forwar, True if any message block in this call actually set `cache_control` — messages, hiring_manager(), _model(), _profile_bullets_json(), _prompt(), hiring_manager — LLM call 6, Sonnet (plan.md §7, CLAUDE.md role 5). "Could you d (+2 more)
 
 ### Community 53 - "Community 53"
 Cohesion: 0.25
@@ -394,8 +406,8 @@ Cohesion: 0.36
 Nodes (7): _detect_lang(), _employment_type(), fetch_jobs(), Arbeitnow job-board ingestion — public API, no auth (plan.md sourcing).  Real re, Fetch postings from Arbeitnow and map them into `Job`.      Arbeitnow's public A, _strip_html(), Job
 
 ### Community 55 - "Community 55"
-Cohesion: 0.39
-Nodes (7): _draft(), A section absent from section_order (e.g. no 'skills' bullets drafted) must not, solution.md step 2: idempotent render — a second call with the same draft must, test_cover_letter_render_data_has_company_and_body(), test_cv_render_data_matches_existing_template_shape(), test_cv_render_data_only_includes_sections_in_section_order(), test_render_documents_skips_compile_when_draft_unchanged()
+Cohesion: 0.23
+Nodes (11): chunk_by_heading(), fetch_repo_files(), _list_dir(), load_cache(), parse_repo_url(), repo_docs — README + top-level docs/*.md ingestion for the evidence store (plan., Split markdown on any-level `#` headings. Each chunk is its heading line plus, github.com/Deepak589/RAG_pipeline" (bare, per the real yaml) or an     https://- (+3 more)
 
 ### Community 56 - "Community 56"
 Cohesion: 0.38
@@ -434,8 +446,8 @@ Cohesion: 0.33
 Nodes (6): 21.1 Five memory types, 21.2 Scoped access — which node sees what, 21.3 Write policy, 21.4 Procedural memory — learning from your edits, 21.5 Context budget per node, 21. Memory architecture
 
 ### Community 65 - "Community 65"
-Cohesion: 0.19
-Nodes (12): The full requirement, plus each clause inside it.      An embedding of four idea, subqueries(), Coverage scoring and the hard-gap gate.  This is the step that saves money, so i, Every LinkedIn location ends in ", Germany" — it must not match on its own., Every LinkedIn location ends in ", Germany" — it must not match on its own., e.g." lists leave connective scraps that would retrieve noise., e.g." lists leave connective scraps that would retrieve noise., test_germany_alone_does_not_make_a_location_reachable() (+4 more)
+Cohesion: 0.27
+Nodes (9): The full requirement, plus each clause inside it.      An embedding of four idea, subqueries(), Coverage scoring and the hard-gap gate.  This is the step that saves money, so i, e.g." lists leave connective scraps that would retrieve noise., e.g." lists leave connective scraps that would retrieve noise., test_subqueries_are_capped(), test_subqueries_drops_filler_only_fragments(), test_subqueries_leaves_a_single_idea_alone() (+1 more)
 
 ### Community 66 - "Community 66"
 Cohesion: 0.47
@@ -450,8 +462,8 @@ Cohesion: 0.40
 Nodes (3): _mock_response(), Mocked HTTP layer — no real network/Apify calls (shape per a live dataset pull)., test_fetch_jobs_maps_fields()
 
 ### Community 69 - "Community 69"
-Cohesion: 0.22
-Nodes (12): human_review(), human_review_gate(), _invoke_tracked(), load_job(), tailor_graph — per-job state machine (plan.md §1).      load_job -> extract_requ, Pauses for approve/edit/reject (§9). Only reachable when `build_graph(review_pau, Pauses for approve/edit/reject (§9). Only reachable when `build_graph(review_pau, `graph.ainvoke`, but on any exception persists whatever cost the checkpointer (+4 more)
+Cohesion: 0.23
+Nodes (7): _candidates(), Evidence, Cross-encoder reranking (evidence.rerank), tested in isolation — no network, no, _StubCrossEncoder, test_build_index_tags_repo_doc_chunks_and_retrieve_many_reports_their_source(), test_rerank_can_reorder_by_cross_encoder_score(), test_rerank_sets_rerank_score_without_touching_similarity()
 
 ### Community 70 - "Community 70"
 Cohesion: 0.40
@@ -510,40 +522,36 @@ Cohesion: 0.24
 Nodes (10): judge_requirements(), _model(), _profile_facts(), _prompt(), judge_requirements — LLM second opinion, Sonnet. Runs only on hard/disqualifier, emit_verdicts — one verdict per requirement, same order as given., Graph node. No-op if no hard/disqualifier requirement was left uncovered by the, VerdictList (+2 more)
 
 ### Community 96 - "Community 96"
-Cohesion: 0.24
-Nodes (10): _model(), _prompt(), review — LLM call 4, Sonnet (plan.md §3, §7.4). Loops to rewrite, max 2 attempts, emit_review — the judge's verdict on one draft., 3-sample ensemble, plain majority vote (solution.md step 9).      Ruling: 3 inde, retry' back to rewrite (attempts remain and score is low), else 'proceed'., review(), review_gate() (+2 more)
+Cohesion: 0.38
+Nodes (6): _model(), _prompt(), review — LLM call 4, Sonnet (plan.md §3, §7.4). Loops to rewrite, max 2 attempts, 3-sample ensemble, plain majority vote (solution.md step 9).      Ruling: 3 inde, review(), JobState
 
 ### Community 97 - "Community 97"
-Cohesion: 0.27
-Nodes (9): Run multiple JDs through the graph concurrently (bounded by     `Settings.max_co, Run multiple JDs through the graph concurrently (bounded by     `Settings.max_co, run_many(), _load_companies(), _new_digest(), jobpilot run — poll every configured company, diff against last-seen postings, p, Poll every company in `companies_path` (default `config/companies.yaml`), run, run() (+1 more)
+Cohesion: 0.18
+Nodes (10): Architecture, Data flow (concrete walkthrough), Error handling, Files touched, Goal, MCP layer: Claude Desktop + Chrome-assisted apply — design, Non-goals / hard boundaries, Open question for implementation plan (+2 more)
 
 ### Community 98 - "Community 98"
 Cohesion: 0.27
 Nodes (9): extract(), extract_requirements(), _model(), _prompt(), extract_requirements — LLM call 1, Haiku (plan.md §3).  SEES ONLY THE JD. Never, JD text -> requirements. Second return value is one usage record per API call, Graph node. No-op if `state.requirements` is already populated (solution.md, JobState (+1 more)
 
 ### Community 99 - "Community 99"
-Cohesion: 0.56
-Nodes (8): ReviewResult, _mock_samples(), review — 3-sample ensemble, plain majority vote (solution.md step 9)., _state(), test_makes_exactly_three_llm_calls(), test_notes_contains_variance_and_raw_scores(), test_one_pass_two_fail_majority_retry_unions_weaknesses(), test_two_pass_one_fail_majority_pass_uses_median()
-
-### Community 100 - "Community 100"
-Cohesion: 0.32
-Nodes (7): job_id(), Identifies the POSTING, not the text (solution.md step 1): same source+url fetch, Identifies the POSTING, not the text (solution.md step 1): same source+url fetch, _employment_type(), fetch_jobs(), Ashby Job Board API ingestion — public, no auth (solution.md step 6).  Shape per, Job
+Cohesion: 0.25
+Nodes (15): emit_review — the judge's verdict on one draft., ReviewResult, ReviewResult, _mock_samples(), _patch_validate_facts_clean(), review — 3-sample ensemble, plain majority vote (solution.md step 9)., `_patch_llm_nodes`'s stub draft cites a source bullet id that this machine's, _state() (+7 more)
 
 ### Community 101 - "Community 101"
-Cohesion: 0.29
-Nodes (7): keyword_set(), Everything the profile can answer a literal keyword match with.      `full_time`, Eligibility terms are phrase-level on purpose.      Splitting "MSc Data Science", Eligibility terms are phrase-level on purpose.      Splitting "MSc Data Science", java" must not be satisfied by "javascript" and vice versa.      Substring match, test_degree_terms_do_not_leak_as_loose_words(), test_keyword_match_is_whole_token_not_substring()
+Cohesion: 0.67
+Nodes (3): Eligibility terms are phrase-level on purpose.      Splitting "MSc Data Science", Eligibility terms are phrase-level on purpose.      Splitting "MSc Data Science", test_degree_terms_do_not_leak_as_loose_words()
 
 ### Community 102 - "Community 102"
-Cohesion: 0.38
-Nodes (6): _employment_type(), fetch_jobs(), MissingCredentialsError, LinkedIn Jobs ingestion via the Apify actor `valig/linkedin-jobs-scraper` — requ, Job, ValueError
+Cohesion: 0.20
+Nodes (9): Deviations from the brief, and why, Files changed (exactly the 5 listed), Full suite / lint / typecheck, Issues or concerns, Self-review findings, Task 3 Report: MCP server with the 6 tools, TDD Evidence, Testing (+1 more)
 
 ### Community 103 - "Community 103"
-Cohesion: 0.43
-Nodes (5): Budget guard + structured JSON logging (CLI-level, no live API calls)., _state(), test_check_budget_blocks_at_cap(), test_check_budget_passes_under_cap(), test_log_run_writes_per_node_cost_breakdown()
+Cohesion: 0.22
+Nodes (8): Concerns, Deviation from brief (and why), Files changed, Full test run (final), Self-review, Task 2 Report: Non-interactive --action/--edits-file on `jobpilot review`, TDD evidence, What was implemented
 
 ### Community 104 - "Community 104"
-Cohesion: 0.27
-Nodes (6): Bain's Berlin office is commutable from Potsdam. It was skipping anyway., Bain's Berlin office is commutable from Potsdam. It was skipping anyway., Bain's clause names no city at all. Unknown office != unreachable office., Bain's clause names no city at all. Unknown office != unreachable office., test_onsite_in_a_reachable_city_is_met(), test_onsite_without_a_job_location_is_a_question_not_a_skip()
+Cohesion: 0.67
+Nodes (3): Bain's Berlin office is commutable from Potsdam. It was skipping anyway., Bain's Berlin office is commutable from Potsdam. It was skipping anyway., test_onsite_in_a_reachable_city_is_met()
 
 ### Community 105 - "Community 105"
 Cohesion: 0.50
@@ -630,8 +638,8 @@ Cohesion: 0.67
 Nodes (3): The block must not swallow the language he does have., The block must not swallow the language he does have., test_english_only_requirement_still_covered()
 
 ### Community 126 - "Community 126"
-Cohesion: 0.67
-Nodes (3): Paraphrase cannot establish fluency either — the block precedes both signals., Paraphrase cannot establish fluency either — the block precedes both signals., test_unclaimable_language_blocks_a_high_semantic_score_too()
+Cohesion: 0.31
+Nodes (8): DraftBullet, _capped_bullets(), Structural overflow guard: cap bullets/section and chars/bullet so a draft can't, _capped_bullets — structural overflow guard (max bullets/section, max chars/bull, test_extra_bullets_beyond_the_cap_are_dropped(), test_overlong_bullet_is_not_truncated_if_it_would_cut_the_metric(), test_overlong_bullet_without_a_metric_is_truncated(), test_short_bullets_pass_through_unchanged()
 
 ### Community 127 - "Community 127"
 Cohesion: 0.67
@@ -645,20 +653,72 @@ Nodes (3): Bundesbank skipped at 100% hard coverage on a semester count and a gr
 Cohesion: 0.67
 Nodes (3): A hard requirement mentioning a transcript is still a gap, not a question., A hard requirement mentioning a transcript is still a gap, not a question., test_unknown_applies_only_to_disqualifiers()
 
+### Community 132 - "Community 132"
+Cohesion: 0.22
+Nodes (8): File structure, Global Constraints, MCP Desktop + Chrome-Assisted Apply Layer Implementation Plan, Review section (fill in after execution), Task 1: `list_pending_review_ids()` in `graph.py`, Task 2: Non-interactive `--action`/`--edits-file` on `jobpilot review`, Task 3: MCP server with the 6 tools, Task 4: Manual end-to-end smoke test + docs
+
+### Community 133 - "Community 133"
+Cohesion: 0.25
+Nodes (7): Concerns, Files changed, Self-review, Task 1 Report — `list_pending_review_ids()` in `graph.py`, TDD Evidence, Test added, What I implemented
+
+### Community 134 - "Community 134"
+Cohesion: 0.29
+Nodes (5): expand_metric_tokens(), The hand-listed `allowed_metrics`. A cached render of the bullets, not truth., Every numeric token a generated bullet may legitimately print.          Derived, Drift between the bullets and the cached `allowed_metrics` list.          Return, Every numeric surface form a set of declared metrics legitimises.      Metric st
+
+### Community 135 - "Community 135"
+Cohesion: 0.29
+Nodes (7): Diagnosis, Output of the `diagnose` node — line-by-line CV vs JD (plan.md §7.1)., _fake_diagnose(), _fake_diagnose(), test_get_job_returns_structured_summary(), _fake_diagnose(), _fake_diagnose()
+
+### Community 136 - "Community 136"
+Cohesion: 0.47
+Nodes (4): _job(), extract_requirements / diagnose skip their LLM call when the field they'd fill i, test_diagnose_skips_when_diagnosis_already_set(), test_extract_requirements_skips_when_requirements_already_set()
+
+### Community 137 - "Community 137"
+Cohesion: 0.60
+Nodes (4): _job(), Phase 1 states (a skip, before diagnose ever runs) must still validate., test_diagnosis_and_draft_default_to_none(), test_diagnosis_and_draft_round_trip_through_job_state()
+
+### Community 138 - "Community 138"
+Cohesion: 0.50
+Nodes (3): Preflight conflict scan, SDD ledger — plan: docs/superpowers/plans/2026-10-05-mcp-desktop-chrome-apply.md, Tasks
+
+### Community 139 - "Community 139"
+Cohesion: 0.67
+Nodes (3): index_build(), (Re)build the evidence store from master_profile.yaml., (Re)build the evidence store from master_profile.yaml.
+
+### Community 140 - "Community 140"
+Cohesion: 0.67
+Nodes (3): index_calibrate(), Measure SEM_THRESHOLD against the hand-labeled probes., Measure SEM_THRESHOLD against the hand-labeled probes.
+
+### Community 141 - "Community 141"
+Cohesion: 0.67
+Nodes (3): `fluent in german` reduces to `german`, which the language block still stops., `fluent in german` reduces to `german`, which the language block still stops., test_filler_stripping_does_not_rescue_an_unclaimable_language()
+
+### Community 142 - "Community 142"
+Cohesion: 0.67
+Nodes (3): Every LinkedIn location ends in ", Germany" — it must not match on its own., Every LinkedIn location ends in ", Germany" — it must not match on its own., test_germany_alone_does_not_make_a_location_reachable()
+
+### Community 143 - "Community 143"
+Cohesion: 0.67
+Nodes (3): Bain's clause names no city at all. Unknown office != unreachable office., Bain's clause names no city at all. Unknown office != unreachable office., test_onsite_without_a_job_location_is_a_question_not_a_skip()
+
+### Community 144 - "Community 144"
+Cohesion: 0.67
+Nodes (3): Mubea wrote "Ability to work regularly in Attendorn" — a presence demand in, Mubea wrote "Ability to work regularly in Attendorn" — a presence demand in, test_ability_phrasing_counts_as_an_onsite_requirement()
+
 ## Knowledge Gaps
-- **289 isolated node(s):** `PreToolUse`, `build_cv.sh script`, `name`, `tagline`, `photo` (+284 more)
+- **330 isolated node(s):** `PreToolUse`, `build_cv.sh script`, `name`, `tagline`, `photo` (+325 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **9 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **14 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Profile` connect `Community 36` to `Community 1`, `Community 97`, `Community 3`, `Community 2`, `Community 5`, `Community 39`, `Community 8`, `Community 10`, `Community 45`, `Community 19`, `Community 52`, `Community 23`, `Community 27`, `Community 60`, `Community 94`, `Community 95`?**
-  _High betweenness centrality (0.034) - this node is a cross-community bridge._
-- **Why does `JobState` connect `Community 27` to `Community 1`, `Community 2`, `Community 3`, `Community 11`, `Community 12`, `Community 16`, `Community 19`, `Community 21`, `Community 23`, `Community 36`, `Community 39`, `Community 40`, `Community 43`, `Community 45`, `Community 52`, `Community 69`, `Community 94`, `Community 95`, `Community 96`, `Community 97`, `Community 98`, `Community 99`?**
-  _High betweenness centrality (0.034) - this node is a cross-community bridge._
-- **Why does `Job` connect `Community 27` to `Community 97`, `Community 2`, `Community 99`, `Community 100`, `Community 69`, `Community 102`, `Community 39`, `Community 40`, `Community 43`, `Community 11`, `Community 17`, `Community 20`, `Community 21`, `Community 54`, `Community 23`, `Community 56`, `Community 26`, `Community 94`?**
-  _High betweenness centrality (0.029) - this node is a cross-community bridge._
+- **Why does `Profile` connect `Community 36` to `Community 0`, `Community 1`, `Community 2`, `Community 3`, `Community 5`, `Community 134`, `Community 7`, `Community 8`, `Community 17`, `Community 19`, `Community 23`, `Community 27`, `Community 34`, `Community 39`, `Community 45`, `Community 52`, `Community 60`, `Community 69`, `Community 94`, `Community 95`?**
+  _High betweenness centrality (0.040) - this node is a cross-community bridge._
+- **Why does `JobState` connect `Community 27` to `Community 0`, `Community 1`, `Community 3`, `Community 7`, `Community 11`, `Community 12`, `Community 16`, `Community 17`, `Community 19`, `Community 21`, `Community 23`, `Community 39`, `Community 40`, `Community 43`, `Community 45`, `Community 52`, `Community 94`, `Community 95`, `Community 96`, `Community 98`, `Community 99`?**
+  _High betweenness centrality (0.027) - this node is a cross-community bridge._
+- **Why does `BaseModel` connect `Community 39` to `Community 3`, `Community 36`, `Community 5`, `Community 6`, `Community 7`, `Community 135`, `Community 4`, `Community 99`, `Community 19`, `Community 20`, `Community 27`, `Community 95`?**
+  _High betweenness centrality (0.024) - this node is a cross-community bridge._
 - **Are the 32 inferred relationships involving `JobState` (e.g. with `ReviewResult` and `JobState`) actually correct?**
   _`JobState` has 32 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 32 inferred relationships involving `Job` (e.g. with `ReviewResult` and `Draft`) actually correct?**
@@ -666,4 +726,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Are the 21 inferred relationships involving `Profile` (e.g. with `ClientAPI` and `Collection`) actually correct?**
   _`Profile` has 21 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `PreToolUse`, `build_cv.sh script`, `name` to the rest of the system?**
-  _627 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _700 weakly-connected nodes found - possible documentation gaps or missing edges._

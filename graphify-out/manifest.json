@@ -65,8 +65,8 @@
     "semantic_hash": ""
   },
   "src/agentic_ai/cli.py": {
-    "mtime": 1790675009.5840194,
-    "ast_hash": "9707fc8e432351b1824a8c0dd8bfbbbe",
+    "mtime": 1791387965.5186598,
+    "ast_hash": "fd94f610921125ecf5838d93bdd3f07f",
     "semantic_hash": ""
   },
   "src/agentic_ai/config.py": {
@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "src/agentic_ai/graph.py": {
-    "mtime": 1791195915.466867,
-    "ast_hash": "558f2f937d4e4440d0c5503f17869a7a",
+    "mtime": 1791387343.9264598,
+    "ast_hash": "2026f10270f78b8b498f1715246c6cfa",
     "semantic_hash": ""
   },
   "src/agentic_ai/judgestats.py": {
@@ -325,8 +325,8 @@
     "semantic_hash": ""
   },
   "tests/test_graph_phase3.py": {
-    "mtime": 1790007742.7316053,
-    "ast_hash": "214eb76252cc62a38548bef79670477e",
+    "mtime": 1791387498.1783762,
+    "ast_hash": "897ce274be33235e6862a0243b44b13d",
     "semantic_hash": ""
   },
   "tests/test_invariance.py": {
@@ -375,8 +375,8 @@
     "semantic_hash": ""
   },
   "tests/test_review.py": {
-    "mtime": 1790010569.576862,
-    "ast_hash": "57bcd4a4b2c1a9cbd4ec86e77fd3e699",
+    "mtime": 1791388014.933516,
+    "ast_hash": "411236e54991a8072176fbaae4781f95",
     "semantic_hash": ""
   },
   "tests/test_rewrite_cap.py": {
@@ -812,6 +812,66 @@
   "Examples/Applied/valuemize_AI-SWE_Munich/Deepak_Katukuri_CV_valuemize.pdf": {
     "mtime": 1790852406.3461337,
     "ast_hash": "2921910512662d1d2abbc0efa4541de7",
+    "semantic_hash": ""
+  },
+  "src/agentic_ai/mcp/__init__.py": {
+    "mtime": 1791388520.7040746,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "src/agentic_ai/mcp/server.py": {
+    "mtime": 1791388650.579575,
+    "ast_hash": "2e8e5e6e991bb7ae965f9d49d82d647a",
+    "semantic_hash": ""
+  },
+  "tests/test_mcp_server.py": {
+    "mtime": 1791388612.140535,
+    "ast_hash": "0b7388e98a876207b0da313445c7e69b",
+    "semantic_hash": ""
+  },
+  ".superpowers/sdd/2026-10-05-mcp-desktop-chrome-apply/progress.md": {
+    "mtime": 1791388231.4085698,
+    "ast_hash": "068bce0e7c4123910587e910fcda4457",
+    "semantic_hash": ""
+  },
+  ".superpowers/sdd/2026-10-05-mcp-desktop-chrome-apply/task-1-brief.md": {
+    "mtime": 1791364463.905493,
+    "ast_hash": "9df3d0faa26189e2c8a31f5ae31bdf0a",
+    "semantic_hash": ""
+  },
+  ".superpowers/sdd/2026-10-05-mcp-desktop-chrome-apply/task-1-report.md": {
+    "mtime": 1791387563.575384,
+    "ast_hash": "f7da60f948827fb40f628739ab32b05b",
+    "semantic_hash": ""
+  },
+  ".superpowers/sdd/2026-10-05-mcp-desktop-chrome-apply/task-2-brief.md": {
+    "mtime": 1791387705.4762032,
+    "ast_hash": "2736253139a450416ab930bef68bf578",
+    "semantic_hash": ""
+  },
+  ".superpowers/sdd/2026-10-05-mcp-desktop-chrome-apply/task-2-report.md": {
+    "mtime": 1791388076.176201,
+    "ast_hash": "16d107db97e405c3f65b79516f44e997",
+    "semantic_hash": ""
+  },
+  ".superpowers/sdd/2026-10-05-mcp-desktop-chrome-apply/task-3-brief.md": {
+    "mtime": 1791388237.7884247,
+    "ast_hash": "b490e3adef3a196fd220dabb4cd9c0e7",
+    "semantic_hash": ""
+  },
+  ".superpowers/sdd/2026-10-05-mcp-desktop-chrome-apply/task-3-report.md": {
+    "mtime": 1791388722.7441034,
+    "ast_hash": "56eb0e3acebb7a053ea9d1daac516e0e",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/plans/2026-10-05-mcp-desktop-chrome-apply.md": {
+    "mtime": 1791214993.9540255,
+    "ast_hash": "5d3b550b84dbd644a6670d9d67fc16b9",
+    "semantic_hash": ""
+  },
+  "docs/superpowers/specs/2026-10-05-mcp-desktop-chrome-apply-design.md": {
+    "mtime": 1791207001.7935376,
+    "ast_hash": "3958e5bc60fdf7cfd54404c33d22dfe0",
     "semantic_hash": ""
   }
 }
