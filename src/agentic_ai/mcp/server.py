@@ -30,7 +30,9 @@ mcp = FastMCP("jobpilot")
 _CLI_TIMEOUT_S = 300  # a full pipeline run (extract/diagnose/rewrite/render) can take minutes
 
 
-async def _run_cli(args: list[str], input: str | None = None) -> dict[str, Any]:
+async def _run_cli(
+    args: list[str], input: str | None = None, parse_json: bool = False
+) -> dict[str, Any]:
     """Shell out to the `jobpilot` console script. Never raises — CLI failures,
     timeouts, and missing-binary errors all come back as {"error": ...}.
 
@@ -50,6 +52,16 @@ async def _run_cli(args: list[str], input: str | None = None) -> dict[str, Any]:
         return {"error": f"'{' '.join(args)}' timed out after {_CLI_TIMEOUT_S}s"}
     except FileNotFoundError:
         return {"error": "'jobpilot' not found on PATH — is the package installed in this environment?"}
+
+    if parse_json:
+        # --json makes a skip/disqualifier (exit 1) a structured, valid result, not
+        # an error — distinguish "pipeline told us no" from "pipeline crashed before
+        # it could print anything".
+        try:
+            return json.loads(result.stdout.strip())
+        except (json.JSONDecodeError, ValueError):
+            pass
+
     if result.returncode != 0:
         stderr_tail = "\n".join(result.stderr.strip().splitlines()[-5:])
         # rich.Console (jobpilot's CLI) writes the human-readable reason (reject,
@@ -133,12 +145,12 @@ async def add_job(jd_text: str | None = None, url: str | None = None) -> dict[st
     jd_text (pasted/read JD) or url (a posting URL) — not both."""
     if bool(jd_text) == bool(url):
         return {"error": "give exactly one of jd_text or url"}
-    args = ["jobpilot", "add", "--review"]
+    args = ["jobpilot", "add", "--review", "--json"]
     if url:
         args += ["--url", url]
-        return await _run_cli(args)
+        return await _run_cli(args, parse_json=True)
     args += ["--stdin"]
-    return await _run_cli(args, input=jd_text)
+    return await _run_cli(args, input=jd_text, parse_json=True)
 
 
 @mcp.tool()

@@ -191,6 +191,9 @@ def add(
     review: bool = typer.Option(
         False, "--review", help="Pause before rendering for human approval — run 'jobpilot review <id>' to continue (§9)."
     ),
+    json_output: bool = typer.Option(
+        False, "--json", help="Print one structured JSON line instead of the rich report (for the MCP server)."
+    ),
 ) -> None:
     """Run one job description through the gap report."""
     if url and (file or stdin or dir):
@@ -266,7 +269,18 @@ def add(
             _handle_pipeline_crash(exc, jd_text)
         persist_run(state)
         _log_run(state)
-        if state.skip_reason or state.draft is None:
+        if json_output:
+            # plain print, never console.print — rich wraps long lines and would
+            # corrupt the JSON the MCP server parses from stdout.
+            print(json.dumps({
+                "job_id": state.job.id,
+                "skip_reason": state.skip_reason,
+                "hard_coverage": state.scores.hard_coverage,
+                "soft_coverage": state.scores.soft_coverage,
+                "open_questions": [q.text for q in state.open_questions()],
+                "paused_for_review": state.skip_reason is None and state.draft is not None,
+            }))
+        elif state.skip_reason or state.draft is None:
             _report(state, verbose=verbose)
         else:
             console.print(f"\n[bold]paused for review[/bold]  job id: [dim]{state.job.id}[/dim]")
