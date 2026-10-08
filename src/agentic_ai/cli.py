@@ -4,6 +4,8 @@
     jobpilot add --file jd.txt --review   pause before render for human approval (§9)
     jobpilot add --dir jds/           run every .txt JD in a directory concurrently
     jobpilot review <job_id>          approve/edit/reject a job paused by --review
+    jobpilot review <job_id> --action approve|edit|reject [--edits-file f.json]
+                                       same, non-interactive (used by the MCP server)
     jobpilot cost [--days N]          spend summary from the runs ledger
     jobpilot index build [--force]    (re)build the evidence store
     jobpilot index calibrate          measure SEM_THRESHOLD against the labeled probes
@@ -300,7 +302,16 @@ def _record_judgements(job_id: str, state, human_action: str) -> None:
 
 
 @app.command()
-def review(job_id: str, verbose: bool = typer.Option(False, "--verbose", "-v")) -> None:
+def review(
+    job_id: str,
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+    action: str | None = typer.Option(
+        None, "--action", help="approve|edit|reject — skip the interactive prompt (for MCP/non-interactive use)."
+    ),
+    edits_file: Path | None = typer.Option(
+        None, "--edits-file", help="JSON file holding an edited Draft. Required with --action edit."
+    ),
+) -> None:
     """Approve, edit, or reject a job paused by 'jobpilot add --review' (§9). An edit
     re-runs recruiter_sim/hiring_manager against the new draft and pauses again with a
     fresh verdict — approve/reject never re-run those, so their verdict cannot go stale."""
@@ -318,6 +329,42 @@ def review(job_id: str, verbose: bool = typer.Option(False, "--verbose", "-v")) 
         raise typer.Exit(1)
 
     _report(paused, verbose=verbose)
+
+    if action is not None:
+        if action not in ("approve", "edit", "reject"):
+            raise typer.BadParameter("--action must be approve, edit, or reject")
+        if action == "edit":
+            if edits_file is None:
+                raise typer.BadParameter("--edits-file is required with --action edit")
+            import json
+
+            from .state import Draft
+
+            edited = Draft.model_validate(json.loads(edits_file.read_text()))
+            _record_judgements(job_id, paused, "edit")
+            if paused.draft is not None:
+                changed = diff_edited_bullets(paused.draft, edited)
+                if changed:
+                    record_preferences(changed)
+            state = resume_review(job_id, action="edit", draft=edited)
+        else:
+            _record_judgements(job_id, paused, action)
+            state = resume_review(job_id, action=action)
+
+        if state.skip_reason is None and not state.artifacts:
+            console.print(f"\njob {job_id} re-paused for review (new verdict after edit)")
+            _report(state, verbose=verbose)
+            raise typer.Exit(0)
+
+        persist_run(state)
+        _log_run(state)
+        if state.artifacts.get("cv_pdf"):
+            console.print("\n[bold]RESULT[/bold]")
+            _report(state, verbose=verbose)
+        else:
+            console.print(f"\n[yellow]{state.skip_reason}[/yellow]")
+        raise typer.Exit(1 if state.skip_reason else 0)
+
     while True:
         choice = typer.prompt("\napprove (a) / edit (e) / reject (r)?").strip().lower()
         if choice in ("a", "approve"):

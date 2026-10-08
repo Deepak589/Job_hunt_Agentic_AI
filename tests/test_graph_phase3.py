@@ -138,7 +138,10 @@ def test_resume_review_approve_renders_and_scores(monkeypatch, tmp_path) -> None
 
 
 def test_resume_review_reject_never_renders(monkeypatch, tmp_path) -> None:
+    from test_review import _patch_validate_facts_clean
+
     _patch_llm_nodes(monkeypatch)
+    _patch_validate_facts_clean(monkeypatch)
     monkeypatch.setattr(settings, "checkpoint_db_path", tmp_path / "checkpoints.db")
 
     paused = graph_mod.run_for_review("fourth fake jd for rejection", title="T", company="C")
@@ -252,3 +255,28 @@ def test_resume_rejects_a_job_paused_for_review(monkeypatch, tmp_path) -> None:
 
     with pytest.raises(ValueError, match="use 'jobpilot review'"):
         graph_mod.resume(paused.job.id)
+
+
+def test_list_pending_review_ids_returns_only_paused_jobs(tmp_path, monkeypatch) -> None:
+    from test_review import _patch_validate_facts_clean
+
+    _patch_llm_nodes(monkeypatch)
+    _patch_validate_facts_clean(monkeypatch)
+    monkeypatch.setattr(settings, "checkpoint_db_path", tmp_path / "checkpoints.db")
+
+    paused = graph_mod.run_for_review(
+        "Werkstudent Data Engineer. Must know Python and SQL.", title="DE", company="Acme"
+    )
+    finished = graph_mod.run_for_review(
+        "Werkstudent Backend. Must know Python and SQL.", title="BE", company="Acme2"
+    )
+    # approve() actually resumes the graph past human_review, clearing it from the
+    # pending set for real; reject() now does too (graph.py's _resume_review no
+    # longer short-circuits reject), but approve is what this test needs to prove
+    # the "finished" job drops out of list_pending_review_ids().
+    graph_mod.resume_review(finished.job.id, action="approve")
+
+    pending = graph_mod.list_pending_review_ids()
+
+    assert paused.job.id in pending
+    assert finished.job.id not in pending
