@@ -156,6 +156,26 @@ def test_add_job_cli_failure_falls_back_to_stdout_tail(monkeypatch) -> None:
     assert result == {"error": "hard gap: no Rust experience"}
 
 
+def test_add_job_cli_failure_prefers_stdout_over_noisy_stderr(monkeypatch) -> None:
+    """Real-world shape: stderr carries incidental library noise (model loading,
+    HF Hub warnings) while stdout carries jobpilot's own rich.Console reason. The
+    reason must win even though stderr is non-empty."""
+
+    def fake_run(cmd, capture_output, text, timeout, input=None):
+        return subprocess.CompletedProcess(
+            cmd,
+            1,
+            stdout="disqualifier: Very good German language skills\n",
+            stderr="UserWarning: some weights were not used\n",
+        )
+
+    monkeypatch.setattr(server.subprocess, "run", fake_run)
+
+    result = asyncio.run(server.add_job(jd_text="some JD text"))
+
+    assert result == {"error": "disqualifier: Very good German language skills"}
+
+
 def test_add_job_stdin_branch_missing_binary_returns_error(monkeypatch) -> None:
     def fake_run(cmd, capture_output, text, timeout, input=None):
         raise FileNotFoundError("jobpilot")

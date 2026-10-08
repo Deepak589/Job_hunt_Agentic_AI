@@ -257,6 +257,61 @@ def test_resume_rejects_a_job_paused_for_review(monkeypatch, tmp_path) -> None:
         graph_mod.resume(paused.job.id)
 
 
+def test_run_for_review_crash_persists_cost_like_run_does(monkeypatch, tmp_path) -> None:
+    """`_run` already wraps `ainvoke` in `_invoke_tracked` so a crash mid-pipeline still
+    persists the cost spent on nodes that completed before it (see its docstring: "a
+    crash on e.g. rewrite must not lose the llm_calls spent on extract_requirements/
+    diagnose/judge_requirements before it"). `run_for_review` called raw `ainvoke`
+    instead, with no such persistence — a crashed review-path run silently dropped
+    its cost."""
+    monkeypatch.setattr(settings, "checkpoint_db_path", tmp_path / "checkpoints.db")
+    monkeypatch.setattr(settings, "jobs_db_path", tmp_path / "jobpilot.db")
+
+    monkeypatch.setattr(graph_mod, "extract_requirements", _fake_extract_requirements)
+
+    def _boom(state):
+        raise RuntimeError("simulated crash in diagnose")
+
+    monkeypatch.setattr(graph_mod, "diagnose", _boom)
+
+    import pytest
+
+    with pytest.raises(RuntimeError, match="simulated crash in diagnose"):
+        graph_mod.run_for_review("a crashing jd, quite unique", title="T", company="C")
+
+    import sqlite3
+
+    job_id = graph_mod.job_id("manual", "", "a crashing jd, quite unique")
+    with sqlite3.connect(settings.jobs_db_path) as conn:
+        row = conn.execute(
+            "SELECT verdict FROM runs WHERE job_id = ?", (job_id,)
+        ).fetchone()
+    assert row is not None, "crashed review-path run left no cost record"
+    assert row[0] is None
+
+
+def test_checkpoint_round_trip_does_not_warn_about_unregistered_types(monkeypatch, tmp_path, caplog) -> None:
+    """LangGraph's default (permissive) msgpack serializer warns on every unregistered
+    type it deserializes from a checkpoint ("This will be blocked in a future version").
+    Every type it's warning about here is one of this project's own trusted pydantic
+    models (state.py) — reading back our own job/draft/score state a second time
+    (e.g. a retried add_job on the same content-hash thread) must not warn."""
+    import logging
+
+    _patch_llm_nodes(monkeypatch)
+    monkeypatch.setattr(settings, "checkpoint_db_path", tmp_path / "checkpoints.db")
+
+    with caplog.at_level(logging.WARNING, logger="langgraph.checkpoint.serde.jsonplus"):
+        paused = graph_mod.run_for_review(
+            "a job description read back twice, quite unique", title="T", company="C"
+        )
+        # reading the state back is what triggers deserialization of the checkpointed types
+        graph_mod.get_paused_state(paused.job.id)
+
+    unregistered_warnings = [r for r in caplog.records if "unregistered type" in r.message]
+    assert unregistered_warnings == []
+
+
 def test_list_pending_review_ids_returns_only_paused_jobs(tmp_path, monkeypatch) -> None:
     from test_review import _patch_validate_facts_clean
 

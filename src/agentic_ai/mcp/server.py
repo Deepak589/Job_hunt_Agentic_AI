@@ -56,7 +56,10 @@ async def _run_cli(args: list[str], input: str | None = None) -> dict[str, Any]:
         # hard-gap skip, budget cap) to stdout, not stderr — never discard it in
         # favor of a generic "exited N".
         stdout_tail = "\n".join(result.stdout.strip().splitlines()[-5:])
-        return {"error": stderr_tail or stdout_tail or f"jobpilot exited {result.returncode}"}
+        # stdout wins: rich.Console prints jobpilot's own reason there on every
+        # exit path (reject/skip/budget-cap); stderr tends to carry incidental
+        # library noise (model loading, HF Hub warnings), not the real reason.
+        return {"error": stdout_tail or stderr_tail or f"jobpilot exited {result.returncode}"}
     return {"status": "ok", "output": result.stdout.strip()}
 
 

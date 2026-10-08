@@ -167,3 +167,34 @@ def test_review_action_edit_applies_edited_draft(tmp_path, monkeypatch) -> None:
     )
 
     assert result.exit_code == 0, result.output
+
+
+def test_add_review_crash_exits_clean_without_raw_traceback(tmp_path, monkeypatch) -> None:
+    """A crash inside run_for_review (e.g. a bad checkpoint resume) must not dump a raw
+    Python traceback to stdout — the MCP server's add_job tool reads stdout as the
+    user-facing reason, and a multi-page traceback there is worse than useless."""
+    from typer.testing import CliRunner
+
+    import agentic_ai.graph as graph_mod
+    from agentic_ai.cli import app
+    from agentic_ai.config import settings
+
+    monkeypatch.setattr(settings, "checkpoint_db_path", tmp_path / "checkpoints.db")
+    monkeypatch.setattr(settings, "jobs_db_path", tmp_path / "jobpilot.db")
+    monkeypatch.setattr(settings, "log_path", tmp_path / "jobpilot.log.jsonl")
+
+    def _boom(jd_text, **job_fields):
+        raise RuntimeError("stale checkpoint: Scores deserialization failed")
+
+    monkeypatch.setattr(graph_mod, "run_for_review", _boom)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["add", "--stdin", "--review"], input="some JD text")
+
+    assert result.exit_code == 1
+    assert "Traceback (most recent call last)" not in result.output
+    assert "stale checkpoint: Scores deserialization failed" in result.output
+
+    logged = [line for line in settings.log_path.read_text().splitlines() if '"crash"' in line]
+    assert len(logged) == 1
+    assert "stale checkpoint: Scores deserialization failed" in logged[0]

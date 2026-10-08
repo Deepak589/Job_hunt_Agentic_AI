@@ -22,7 +22,7 @@ import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NoReturn
 
 import typer
 from rich.console import Console
@@ -63,6 +63,22 @@ def _log_run(state) -> None:
         "verdict": state.hiring_manager.verdict if state.hiring_manager else (state.ats.verdict if state.ats else None),
         "skip_reason": state.skip_reason,
     })
+
+
+def _handle_pipeline_crash(exc: Exception, jd_text: str) -> NoReturn:
+    """A node raised instead of returning a verdict. Log the full exception (traceback
+    excluded — str(exc) is what jobpilot's own exceptions put in their message; a
+    bare-exception type would need more, but nothing here raises bare) to the JSONL
+    log, print ONE clean line to stdout (rich.Console, same place every other reason
+    goes — see `_run_cli` in mcp/server.py, which reads stdout as the user-facing
+    reason and has no traceback parser), then exit 1. Never let a raw traceback reach
+    stdout: it would just be 5 lines of noise to whatever reads this CLI's output."""
+    import hashlib
+
+    content_hash = hashlib.sha256(jd_text.strip().encode()).hexdigest()[:16]
+    _log_event({"event": "crash", "content_hash": content_hash, "error": str(exc)})
+    console.print(f"[red]jobpilot crashed: {exc}[/red]")
+    raise typer.Exit(1)
 
 
 def _check_budget() -> None:
@@ -244,7 +260,10 @@ def add(
     if review:
         from .graph import run_for_review
 
-        state = run_for_review(jd_text, **job_fields)
+        try:
+            state = run_for_review(jd_text, **job_fields)
+        except Exception as exc:
+            _handle_pipeline_crash(exc, jd_text)
         persist_run(state)
         _log_run(state)
         if state.skip_reason or state.draft is None:

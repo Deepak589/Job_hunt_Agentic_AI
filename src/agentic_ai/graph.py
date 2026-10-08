@@ -60,6 +60,8 @@ import hashlib
 from contextlib import asynccontextmanager
 from typing import Literal
 
+import aiosqlite
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import END, StateGraph
 from langgraph.types import Command, interrupt
@@ -198,11 +200,34 @@ def build_graph(skip_render: bool = False, checkpointer=None, review_pause: bool
     return g.compile(checkpointer=checkpointer)
 
 
+# Every pydantic model `state.py` defines ends up in a checkpoint sooner or later
+# (JobState aggregates all of them) — LangGraph's default (permissive) serializer
+# warns on every one of them it deserializes ("will be blocked in a future
+# version"), and the warning fires unconditionally in permissive mode regardless
+# of any extra allowlist passed in (`with_allowlist` is a no-op there — only an
+# EXPLICIT, non-permissive allowlist suppresses it, per jsonplus.py's
+# `_create_msgpack_ext_hook`: `if allowed_modules is True: ... warn; return True`
+# fires before the allowlist is ever consulted). These are our own trusted
+# models, not attacker-controlled data, so passing them explicitly — which also
+# blocks anything NOT in this list, same spirit as LANGGRAPH_STRICT_MSGPACK=true
+# but scoped to this project instead of every third-party type — is correct.
+_STATE_MSGPACK_ALLOWLIST = [
+    ("agentic_ai.state", name)
+    for name in (
+        "AtsScore", "Evidence", "Requirement", "Job", "Diagnosis", "DraftBullet",
+        "Draft", "RecruiterResult", "HiringManagerVerdict", "Scores", "JobState",
+    )
+]
+
+
 @asynccontextmanager
 async def _open_checkpointer():
     """One `AsyncSqliteSaver` per call, WAL mode — concurrent `ainvoke`s (run_many) need
     WAL, not the default rollback journal, or writers block each other."""
-    async with AsyncSqliteSaver.from_conn_string(str(settings.checkpoint_db_path)) as saver:
+    async with aiosqlite.connect(str(settings.checkpoint_db_path)) as conn:
+        saver = AsyncSqliteSaver(
+            conn, serde=JsonPlusSerializer(allowed_msgpack_modules=_STATE_MSGPACK_ALLOWLIST)
+        )
         await saver.conn.execute("PRAGMA journal_mode=WAL")
         yield saver
 
@@ -335,8 +360,7 @@ async def _run_for_review(jd_text: str, title: str, company: str, job_fields: di
     async with _open_checkpointer() as saver:
         graph = build_graph(skip_render=False, checkpointer=saver, review_pause=True)
         config = {"configurable": {"thread_id": job.id}, "callbacks": _tracing_callbacks()}
-        result = await graph.ainvoke(JobState(job=job), config=config, durability="sync")
-    return JobState.model_validate(result)
+        return await _invoke_tracked(graph, JobState(job=job), config)
 
 
 def run_for_review(jd_text: str, title: str = "", company: str = "", **job_fields) -> JobState:
