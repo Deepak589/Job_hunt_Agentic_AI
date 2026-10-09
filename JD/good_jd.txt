@@ -1,0 +1,73 @@
+About the job
+Linde GmbH, Corporate Office
+
+Working Student - AI Engineering (Generative AI & Agents) (m/f/d)
+
+Pullach, nearby Munich, Germany | req33765
+
+What You Will Enjoy Doing
+
+In this position you will develop and test AI agents, and workflow automations using modern LLM and agentic AI frameworks
+Additionally you will support the integration of AI agents with enterprise data sources, APIs, and business applications
+You will help drive prompt engineering, evaluation, and optimization of agent performance
+Further you will contribute to feature development, experimentation, and continuous improvement
+Helping monitor AI system quality, reliability, and AI compliance will also be part of your tasks
+You will also support AI product teams with proof-of-concepts, prototypes, and technical documentation
+
+What Makes You Great
+
+You are currently enrolled in a Bachelor's or Master's degree in Computer Science or a related field
+You bring hands-on experience with Python and modern software development practices
+You are familiar with Large Language Models (LLMs), Generative AI, Agentic AI concepts, or AI application development
+Experience with AI/ML frameworks, APIs, or cloud platforms is beneficial
+You possess strong analytical and problem-solving skills
+You have an interest in building enterprise AI solutions and automating business processes
+Working independently while collaborating effectively within international teams is natural for you
+You demonstrate strong written and verbal communication skills in English
+You are passionate about learning and applying new AI technologies in real-world environments
+
+Why you will love working with us
+
+Linde is a leading global industrial gases and engineering company with 2025 sales of $34 billion. We live our mission of making our world more productive every day by providing high-quality solutions, technologies and services which are making our customers more successful and helping to sustain, decarbonize and protect our planet. Linde serves a variety of end markets such as chemicals & energy, food & beverage, electronics, healthcare, manufacturing, metals and mining.
+
+Linde’s industrial gases and technologies are used in countless applications, enabling space exploration and launch technologies, delivering ultra-high-purity and specialty gases for semiconductor manufacturing, providing life-saving medical oxygen and enabling clean hydrogen production and carbon capture to reduce greenhouse gas emissions.
+
+Linde also delivers state-of-the-art gas processing solutions to support customer growth, efficiency improvements and emissions reductions.
+
+For more information about the company and its products and services, please visit linde.com
+
+What we offer you!
+
+At Linde, the sky is not the limit. If you’re looking to build a career where your work reaches beyond your job description and betters the people with whom you work, the communities we serve, and the world in which we all live, at Linde, your opportunities are limitless. Be Linde. Be Limitless.
+
+In addition to an attractive compensation package, we offer you many social benefits, such as
+
+Attractive remuneration package in accordance with the regulations of the collective agreement for the chemical industry
+Flexible working hours including a flextime account
+Hybrid mobile working within the scope of applicable collective regulations
+Modern company restaurant (including vegetarian and vegan dishes) & a Coffee Point on campus
+Diverse personal and professional development opportunities
+Support in all life situations through company counseling services
+Health offerings (e.g., bike leasing & corporate fitness programs)
+Corporate benefits (employee discounts and offers)
+Direct S-Bahn connection and parking slots with electric charging stations
+Bike parking facilities (repair options, showers & changing rooms)
+Networking events such as Cultural Coffee, Social Team Day, Kaleidoscope, Linde-Wiesn, Summer and Winter festivals
+
+…and much more!
+
+Note: Benefits may vary depending on the position.
+
+Have we inspired you?
+
+We are looking forward to receiving your application via our online job market.
+
+Your contact person
+
+Linde GmbH, Corporate Office
+
+Florian Voigtländer
+
+Any designations used of course apply to persons of all genders. The form of speech used here is for simplicity only.
+
+Linde GmbH, Corporate Office acts responsibly towards its shareholders, business partners, employees, society and the environment in every one of its business areas, regions and locations across the globe. The company is committed to technologies and products that unite the goals of customer value and sustainable development.

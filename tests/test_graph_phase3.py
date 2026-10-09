@@ -1,66 +1,23 @@
-"""Phase 3 — recruiter_gate routing (pure) + the checkpointer/interrupt/resume
-mechanics, exercised with every LLM-calling node monkeypatched so this costs zero
-API calls (same convention as test_graph_phase2.py: gates get real unit tests, LLM
-nodes never get mocked-call tests — but the interrupt/resume plumbing around them is
-new and risky enough to verify end-to-end with stand-ins).
+"""Checkpointer/interrupt/resume mechanics of the slim graph, exercised with every
+LLM-calling node monkeypatched so this costs zero API calls (gates get real unit tests,
+LLM nodes never get mocked-call tests — but the interrupt/resume plumbing around them is
+risky enough to verify end-to-end with stand-ins).
 """
 
 from __future__ import annotations
 
 import agentic_ai.graph as graph_mod
 from agentic_ai.config import settings
-from agentic_ai.nodes.recruiter_sim import recruiter_gate
-from agentic_ai.state import (
-    Diagnosis,
-    Draft,
-    DraftBullet,
-    HiringManagerVerdict,
-    Job,
-    JobState,
-    RecruiterResult,
-    Scores,
-)
+from agentic_ai.state import Diagnosis, Draft, DraftBullet
 
 
-def _state(**overrides) -> JobState:
-    job = Job(id="t", source="manual", title="Test", jd_text="...")
-    base = dict(job=job)
-    base.update(overrides)
-    return JobState(**base)
-
-
-# --------------------------------------------------------------------- recruiter_gate
-
-
-def test_recruiter_gate_hard_fail_skips() -> None:
-    s = _state(recruiter=RecruiterResult(result="hard_fail", reason="no Rust anywhere"))
-    assert recruiter_gate(s) == "hard_fail"
-
-
-def test_recruiter_gate_pass_proceeds() -> None:
-    s = _state(recruiter=RecruiterResult(result="pass", reason="all terms present"))
-    assert recruiter_gate(s) == "proceed"
-
-
-def test_recruiter_gate_soft_fail_proceeds() -> None:
-    s = _state(recruiter=RecruiterResult(result="soft_fail", reason="one synonym missing"))
-    assert recruiter_gate(s) == "proceed"
-
-
-def test_recruiter_gate_no_result_proceeds() -> None:
-    assert recruiter_gate(_state()) == "proceed"
-
-
-# --------------------------------------------------------- interrupt/resume mechanics
-
-
-def _fake_extract_requirements(state):
-    return {"requirements": [], "notes": ["stub: 0 requirements"]}
-
-
-def _fake_diagnose(state):
+def _fake_analyze(state):
     diagnosis = Diagnosis(hard_gaps=[], soft_gaps=[], disqualifiers=[], matches=["stub match"])
-    return {"diagnosis": diagnosis, "notes": ["stub diagnose"]}
+    return {"requirements": [], "diagnosis": diagnosis, "notes": ["stub analyze"]}
+
+
+def _fake_validate_facts(state):
+    return {"validation_errors": [], "notes": ["stub validate_facts"]}
 
 
 def _fake_rewrite(state):
@@ -77,27 +34,10 @@ def _fake_rewrite(state):
     return {"draft": draft, "attempt_count": state.attempt_count + 1, "notes": ["stub rewrite"]}
 
 
-def _fake_review(state):
-    scores = state.scores.model_copy(update={"review_score": 9})
-    return {"scores": scores, "validation_errors": [], "notes": ["stub review"]}
-
-
-def _fake_recruiter_sim(state):
-    return {"recruiter": RecruiterResult(result="pass", reason="stub"), "notes": ["stub recruiter"]}
-
-
-def _fake_hiring_manager(state):
-    verdict = HiringManagerVerdict(verdict="apply", why="stub", indefensible_bullets=[])
-    return {"hiring_manager": verdict, "notes": ["stub hiring_manager"]}
-
-
 def _patch_llm_nodes(monkeypatch) -> None:
-    monkeypatch.setattr(graph_mod, "extract_requirements", _fake_extract_requirements)
-    monkeypatch.setattr(graph_mod, "diagnose", _fake_diagnose)
+    monkeypatch.setattr(graph_mod, "analyze", _fake_analyze)
     monkeypatch.setattr(graph_mod, "rewrite", _fake_rewrite)
-    monkeypatch.setattr(graph_mod, "review", _fake_review)
-    monkeypatch.setattr(graph_mod, "recruiter_sim", _fake_recruiter_sim)
-    monkeypatch.setattr(graph_mod, "hiring_manager", _fake_hiring_manager)
+    monkeypatch.setattr(graph_mod, "validate_facts_node", _fake_validate_facts)
 
 
 def test_run_for_review_pauses_before_render(monkeypatch, tmp_path) -> None:
@@ -107,8 +47,7 @@ def test_run_for_review_pauses_before_render(monkeypatch, tmp_path) -> None:
     paused = graph_mod.run_for_review("a fake jd, quite unique", title="T", company="C")
 
     assert paused.draft is not None
-    assert paused.recruiter is not None and paused.recruiter.result == "pass"
-    assert paused.hiring_manager is not None and paused.hiring_manager.verdict == "apply"
+    assert paused.diagnosis is not None and paused.diagnosis.matches == ["stub match"]
     assert paused.artifacts == {}  # render_documents has not run yet
     assert paused.ats is None
 
@@ -122,7 +61,7 @@ def test_get_paused_state_reads_back_the_same_job(monkeypatch, tmp_path) -> None
 
     assert fetched.draft is not None
     assert fetched.draft.profile_line == paused.draft.profile_line
-    assert fetched.hiring_manager.verdict == "apply"
+    assert fetched.diagnosis is not None
 
 
 def test_resume_review_approve_renders_and_scores(monkeypatch, tmp_path) -> None:
@@ -138,10 +77,7 @@ def test_resume_review_approve_renders_and_scores(monkeypatch, tmp_path) -> None
 
 
 def test_resume_review_reject_never_renders(monkeypatch, tmp_path) -> None:
-    from test_review import _patch_validate_facts_clean
-
     _patch_llm_nodes(monkeypatch)
-    _patch_validate_facts_clean(monkeypatch)
     monkeypatch.setattr(settings, "checkpoint_db_path", tmp_path / "checkpoints.db")
 
     paused = graph_mod.run_for_review("fourth fake jd for rejection", title="T", company="C")
@@ -152,56 +88,36 @@ def test_resume_review_reject_never_renders(monkeypatch, tmp_path) -> None:
     assert rejected.ats is None
 
 
-def test_resume_review_edit_reruns_recruiter_and_hiring_manager(monkeypatch, tmp_path) -> None:
-    """solution.md step 2: editing must NOT leave recruiter/hiring_manager stale against
-    the edited draft — it routes back through recruiter_sim for a fresh verdict and
-    pauses again (README's old caveat, now fixed)."""
+def test_resume_review_edit_pauses_again_with_the_edited_draft(monkeypatch, tmp_path) -> None:
+    """Editing must not render: it fact-checks the edited draft and pauses again, so the
+    next approve renders what the human actually edited."""
     _patch_llm_nodes(monkeypatch)
     monkeypatch.setattr(settings, "checkpoint_db_path", tmp_path / "checkpoints.db")
 
-    calls: list[str] = []
-
-    def _counting_recruiter_sim(state):
-        calls.append("recruiter_sim")
-        return _fake_recruiter_sim(state)
-
-    monkeypatch.setattr(graph_mod, "recruiter_sim", _counting_recruiter_sim)
-
     paused = graph_mod.run_for_review("fifth fake jd for editing", title="T", company="C")
-    assert calls == ["recruiter_sim"]  # one pass to reach the first pause
 
     edited = paused.draft.model_copy(update={"profile_line": "Edited profile line."})
     reviewed_again = graph_mod.resume_review(paused.job.id, action="edit", draft=edited)
 
-    assert calls == ["recruiter_sim", "recruiter_sim"]  # edit re-ran it
     assert reviewed_again.draft.profile_line == "Edited profile line."
     assert reviewed_again.draft.bullets == paused.draft.bullets  # untouched fields survive
     assert reviewed_again.artifacts == {}  # still paused, not rendered
     assert reviewed_again.ats is None
-
-    resumed = graph_mod.resume_review(reviewed_again.job.id, action="approve")
-
-    assert resumed.skip_reason is None
-    assert resumed.draft.profile_line == "Edited profile line."
-    assert resumed.artifacts.get("cv_pdf")
+    assert graph_mod.job_id("manual", "", "fifth fake jd for editing") in graph_mod.list_pending_review_ids()
 
 
 # ------------------------------------------------------------------- crash recovery
 
 
 def test_resume_continues_without_repaying_completed_nodes(monkeypatch, tmp_path) -> None:
-    """solution.md step 2 verify: a crash mid-run must not force extract/diagnose/rewrite
-    to be re-paid for — `resume()` picks up from the last checkpointed node."""
+    """A crash mid-run must not force analyze/rewrite to be re-paid for — `resume()` picks
+    up from the last checkpointed node."""
     monkeypatch.setattr(settings, "checkpoint_db_path", tmp_path / "checkpoints.db")
-    calls = {"extract": 0, "diagnose": 0, "rewrite": 0, "hiring_manager": 0}
+    calls = {"analyze": 0, "rewrite": 0, "validate": 0}
 
-    def _extract(state):
-        calls["extract"] += 1
-        return _fake_extract_requirements(state)
-
-    def _diag(state):
-        calls["diagnose"] += 1
-        return _fake_diagnose(state)
+    def _an(state):
+        calls["analyze"] += 1
+        return _fake_analyze(state)
 
     def _rw(state):
         calls["rewrite"] += 1
@@ -209,19 +125,16 @@ def test_resume_continues_without_repaying_completed_nodes(monkeypatch, tmp_path
 
     crashed_once = {"done": False}
 
-    def _hiring_manager_crashes_once(state):
-        calls["hiring_manager"] += 1
+    def _validate_crashes_once(state):
+        calls["validate"] += 1
         if not crashed_once["done"]:
             crashed_once["done"] = True
             raise RuntimeError("simulated crash")
-        return _fake_hiring_manager(state)
+        return _fake_validate_facts(state)
 
-    monkeypatch.setattr(graph_mod, "extract_requirements", _extract)
-    monkeypatch.setattr(graph_mod, "diagnose", _diag)
+    monkeypatch.setattr(graph_mod, "analyze", _an)
     monkeypatch.setattr(graph_mod, "rewrite", _rw)
-    monkeypatch.setattr(graph_mod, "review", _fake_review)
-    monkeypatch.setattr(graph_mod, "recruiter_sim", _fake_recruiter_sim)
-    monkeypatch.setattr(graph_mod, "hiring_manager", _hiring_manager_crashes_once)
+    monkeypatch.setattr(graph_mod, "validate_facts_node", _validate_crashes_once)
 
     jd_text = "crash test jd, quite unique"
     job_id = graph_mod.job_id("manual", "", jd_text)
@@ -231,15 +144,13 @@ def test_resume_continues_without_repaying_completed_nodes(monkeypatch, tmp_path
     except RuntimeError:
         pass
 
-    assert calls == {"extract": 1, "diagnose": 1, "rewrite": 1, "hiring_manager": 1}
+    assert calls == {"analyze": 1, "rewrite": 1, "validate": 1}
 
     resumed = graph_mod.resume(job_id)
 
-    assert calls["extract"] == 1  # not re-run
-    assert calls["diagnose"] == 1  # not re-run
+    assert calls["analyze"] == 1  # not re-run
     assert calls["rewrite"] == 1  # not re-run
-    assert calls["hiring_manager"] == 2  # re-run — it never completed
-    assert resumed.hiring_manager is not None and resumed.hiring_manager.verdict == "apply"
+    assert calls["validate"] == 2  # re-run — it never completed
     assert resumed.artifacts.get("cv_pdf")
 
 
@@ -267,16 +178,16 @@ def test_run_for_review_crash_persists_cost_like_run_does(monkeypatch, tmp_path)
     monkeypatch.setattr(settings, "checkpoint_db_path", tmp_path / "checkpoints.db")
     monkeypatch.setattr(settings, "jobs_db_path", tmp_path / "jobpilot.db")
 
-    monkeypatch.setattr(graph_mod, "extract_requirements", _fake_extract_requirements)
+    monkeypatch.setattr(graph_mod, "analyze", _fake_analyze)
 
     def _boom(state):
-        raise RuntimeError("simulated crash in diagnose")
+        raise RuntimeError("simulated crash in rewrite")
 
-    monkeypatch.setattr(graph_mod, "diagnose", _boom)
+    monkeypatch.setattr(graph_mod, "rewrite", _boom)
 
     import pytest
 
-    with pytest.raises(RuntimeError, match="simulated crash in diagnose"):
+    with pytest.raises(RuntimeError, match="simulated crash in rewrite"):
         graph_mod.run_for_review("a crashing jd, quite unique", title="T", company="C")
 
     import sqlite3
@@ -313,10 +224,7 @@ def test_checkpoint_round_trip_does_not_warn_about_unregistered_types(monkeypatc
 
 
 def test_list_pending_review_ids_returns_only_paused_jobs(tmp_path, monkeypatch) -> None:
-    from test_review import _patch_validate_facts_clean
-
     _patch_llm_nodes(monkeypatch)
-    _patch_validate_facts_clean(monkeypatch)
     monkeypatch.setattr(settings, "checkpoint_db_path", tmp_path / "checkpoints.db")
 
     paused = graph_mod.run_for_review(

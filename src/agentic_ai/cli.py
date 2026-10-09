@@ -572,8 +572,7 @@ def _report(state, verbose: bool = False) -> None:
     s = state.scores
     console.print(
         f"hard coverage [bold]{s.hard_coverage:.0%}[/bold]  "
-        f"soft coverage {s.soft_coverage:.0%}  "
-        f"mean similarity {s.semantic_fit:.3f}"
+        f"soft coverage {s.soft_coverage:.0%}"
     )
 
     for q in state.open_questions():
@@ -850,7 +849,7 @@ def run(
     ),
     digest: str = typer.Option("", "--digest", help="Output format: 'json' for machine-readable stdout."),
     batch: bool = typer.Option(
-        False, "--batch", help="Submit extract+diagnose via the Anthropic Batches API (~50% cheaper, slower)."
+        False, "--batch", help="Retired (one analyze call per job now); runs live."
     ),
 ) -> None:
     """Poll every configured company (config/companies.yaml), run genuinely new

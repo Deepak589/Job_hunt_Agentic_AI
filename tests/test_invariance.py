@@ -1,10 +1,8 @@
 """solution.md step 8 — same draft, two section orders -> deterministic outputs must
-not depend on print order. Scoped to what's deterministic: ats_score() (pure), and
-recruiter_sim() (pure since solution.md step 9 — no LLM call left to stub)."""
+not depend on print order. Scoped to what's deterministic: ats_score() (pure)."""
 
 from __future__ import annotations
 
-import agentic_ai.nodes.recruiter_sim as recruiter_sim_mod
 from agentic_ai.profile import Profile
 from agentic_ai.scoring.ats import ParsedPdf, ats_score
 from agentic_ai.state import Draft, DraftBullet, Job, JobState, Requirement, Scores
@@ -46,10 +44,3 @@ def test_ats_total_is_invariant_to_section_order() -> None:
     b = ats_score(_state(["experience", "skills", "projects"]), pdf, profile)
 
     assert a.total == b.total
-
-
-def test_recruiter_sim_result_is_invariant_to_section_order() -> None:
-    a = recruiter_sim_mod.recruiter_sim(_state(["skills", "projects", "experience"]))
-    b = recruiter_sim_mod.recruiter_sim(_state(["experience", "skills", "projects"]))
-
-    assert a["recruiter"].result == b["recruiter"].result == "pass"

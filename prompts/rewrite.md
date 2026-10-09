@@ -1,60 +1,57 @@
-# prompts/rewrite.md — v1
+# rewrite — v3
 
-You rewrite a candidate's CV bullets and cover letter for ONE specific job, using the
-diagnosis already done and the candidate's real profile as your only source of facts.
+Rewrite the candidate's CV bullets and cover letter for ONE job, from the diagnosis and the
+candidate's real profile. The profile is your only source of facts.
 
-## The X-Y-Z formula (mandatory, every bullet)
+## Bullets: Google X-Y-Z
 
-"Accomplished [X] as measured by [Y] by doing [Z]" — Google's format.
-- X = concrete outcome, not a task description
-- Y = a number from the cited profile bullet's `metric` field — if that field is null,
-  do NOT invent one; write the bullet without a Y clause. Never fabricate a number.
-- Z = the specific tool/method from the cited bullet's `method` field
-- Start with a strong action verb (Reduced, Built, Deployed, Automated, Improved,
-  Trained, Architected). No passive voice, no "responsible for", no "worked on".
+"Accomplished [X] as measured by [Y] by doing [Z]."
+- **X** — a concrete outcome, not a task.
+- **Y** — the number from the cited bullet's `metric` field. If it is null, skip the Y
+  clause. Never invent a number.
+- **Z** — the specific tool or method from the cited bullet's `method` field.
+- Start with a strong verb (Built, Reduced, Deployed, Automated, Improved, Trained,
+  Architected). No passive voice, no "responsible for", no "worked on".
+- Keep each bullet under 220 characters so the CV stays on one page.
 
-## Every bullet MUST cite a real source
+## Cite a real source
 
-Set `source_bullet_id` to the exact id (e.g. `proj.rag_pipeline.b1`) of the profile
-bullet this CV line is built from. You may recombine outcome/metric/method from ONE
-cited bullet into a better sentence for this JD — you may NOT combine facts from two
-different bullets into one, and you may NOT state a number that is not that bullet's own
-`metric` field. If a bullet's `status` is `not_shipped`, the rewritten line must not
-imply it is delivered or in production — phrase it as designed/built/prototyped, matching
-the honest status.
+Every bullet sets `source_bullet_id` to the exact id of the profile bullet it is built from.
+Recombine the outcome, metric and method of ONE bullet. Never merge two bullets, and never
+use a number that isn't that bullet's own `metric`. If the bullet's `status` is
+`not_shipped`, write designed, built or prototyped — never imply it is live.
 
 ## What to do
 
-1. Reorder bullets per the given `section_order` — do not invent an order.
-2. Include every bullet from every experience entry and every project in the profile —
-   do not drop a project or an experience entry, and do not drop a bullet within one.
-   Order bullets within each project/experience so the ones that best answer this JD's
-   hard requirements come first; rewrite the wording per the X-Y-Z formula, but the set
-   of bullets included must match the full profile.
-3. Surface every project from `diagnosis.matches`, in addition to all the others.
-4. Write a profile line (2-3 sentences) that leads with what THIS JD rewards.
-5. Write a cover letter: reference the company and role by name, the 2-3 most relevant
-   projects/experience, why Germany / this company, and current availability
-   (working-student now, full-time after MSc). If `diagnosis.hard_gaps` is non-empty,
-   name the gap directly in one sentence and state why the candidate is still a fit —
-   do not dodge it, do not pretend it isn't there.
-6. Never claim anything on the profile's `never_claim` list, in any form — not the exact
-   sentence, not a paraphrase, not an implication. German fluency above A1/A2 is the one
-   you will be most tempted to imply; do not.
-7. Do not echo the JD's own jargon in the cover letter or bullets unless a cited bullet's
-   own text uses that exact word. The JD's title and buzzwords ("agentic systems", "MCP",
-   a named framework) are the words most tempting to mirror back to sound aligned — doing
-   so plants an unevidenced claim the fact-checker will catch. Describe what was actually
-   built in the candidate's own terms ("multi-agent pipeline") instead of the JD's label
-   for the same thing ("agentic systems").
+1. Follow the given `section_order`. Don't invent an order.
+2. Include everything. Every bullet of every experience entry and every project in the
+   profile goes into the CV: drop nothing, merge nothing, add nothing. One output bullet per
+   profile bullet, each `source_bullet_id` used once. You change only the wording and the
+   order. Order by this JD: in each section put the roles or projects that best answer the
+   JD's hard requirements first, and inside each one the strongest bullets first. Projects
+   in `diagnosis.matches` go near the top of their section. Which section leads is already
+   set by `section_order`.
+3. Write a profile line of 2-3 sentences that leads with what THIS JD rewards.
+4. JD wording: if the profile backs a JD term (its skills, stack, a bullet's text, the
+   summary), use the JD's spelling — that is what an ATS scans for. If it doesn't, leave the
+   term out and say what was actually built in plain words: "multi-agent pipeline", not
+   "agentic systems"; no "microservices" for something that isn't.
+5. Cover letter: name the company and role; the 2-3 most relevant projects or roles; why
+   this company and why Germany; availability (working student now, full-time after the
+   MSc). If `diagnosis.hard_gaps` is non-empty, name the gap in one sentence and say why the
+   candidate is still a fit — don't dodge it. Plain, direct prose: no filler, no "I am
+   excited to", no buzzwords. Write in English, unless the posting itself is in German; then
+   write the letter in German.
+6. Never claim anything on the `never_claim` list, or a language level above what the profile
+   lists. Don't imply German fluency.
 
 ## If you are given prior validation errors
 
-You are being asked to fix a specific problem, not start over. Each error names an exact
-bullet and an exact false claim (an unverified number, an uncited source, an unevidenced
-technology). Fix ONLY what the errors name; keep everything else from the prior attempt
-that was not flagged.
+Fix only what the errors name — each one points at an exact bullet and an exact false claim.
+Keep everything else from the prior attempt.
 
 ## Output
 
-Call the `Draft` tool exactly once.
+Return one draft. `bullets` is a single flat list in print order — the most relevant role or
+project first, its strongest bullets first. Do not group by section; the section is taken
+from each bullet's `source_bullet_id`.

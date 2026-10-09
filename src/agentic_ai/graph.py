@@ -1,56 +1,38 @@
-"""tailor_graph — per-job state machine (plan.md §1).
+"""tailor_graph — per-job state machine, slimmed to one reasoning call.
 
-    load_job -> extract_requirements -> retrieve_evidence -> score_coverage
-                                                                 |
-                                                     judge_requirements
-                                                                 |
-                                       hard_gap_gate --skip--> log_skip -> END
-                                                 \\--proceed
-                                                        v
-                                                    diagnose -> rewrite -> validate_facts
-                                                         ^                       |
-                                                         |          errors, attempts left
-                                                         +-----------------------+
-                                                         |
-                                            errors, attempts exhausted -> log_fact_failure -> END
-                                                         |
-                                                       clean
-                                                         v
-                                                      review
-                                                         |
-                                     score<min, attempts left -> back to rewrite (loop above)
-                                                         |
-                                                     proceed  (skip_render=True stops here -> END)
-                                                         v
-                                                  recruiter_sim
-                                                    /          \\
-                                            hard_fail          pass/soft_fail
-                                                 v                  v
-                                    log_recruiter_fail -> END   hiring_manager
-                                                                    |
-                                                       [only when review_pause=True]
-                                                                    v
-                                                              human_review
-                                                            /      |      \\
-                                                      reject     edit    approve
-                                                         v         |        v
-                                                        END   recruiter_sim  render_documents -> score_ats -> END
-                                                              (loop above, fresh verdict)
+    load_job -> analyze -> hard_gap_gate --skip--> log_skip -> END
+                                  \\--proceed
+                                       v
+                                    rewrite -> validate_facts
+                                       ^            |
+                                       |   errors, attempts left
+                                       +------------+
+                                                    |
+                          errors, attempts exhausted -> log_fact_failure -> END
+                                                    |
+                                                  clean
+                                                    |
+                          (skip_render=True stops here -> END)
+                                                    v
+                                      [review_pause=True] human_review
+                                          /        |         \\
+                                     reject      edit      approve
+                                       v           |           v
+                                      END    human_review   render_documents -> score_ats -> END
 
-recruiter_sim/hiring_manager (roles 4-5, CLAUDE.md) only run on the full path —
-`skip_render=True` stops at `review` exactly as in Phase 1/2, unchanged.
+What was removed and why (see Examples/CLAUDE.md, the manual flow this mirrors): the separate
+extract / evidence-retrieval / coverage / judge / diagnose nodes are one `analyze` call that
+reads JD and profile together; the LLM `review`, `recruiter_sim` and `hiring_manager` nodes
+are gone because the human review step is the reviewer. What stays deterministic and
+non-negotiable: the hard-gap gate, `validate_facts` (no invented claims), rendering and
+`score_ats`.
 
-Durability (solution.md step 2): `run()`/`run_many()`/`run_for_review()`/`resume_review()`
-each open ONE `AsyncSqliteSaver` per call (WAL mode — a sync `SqliteSaver` would block
-the event loop under `run_many`'s concurrent `ainvoke`s), `thread_id = job.id`, and
-invoke with `durability="sync"` so a crashed process can pick a job back up via
-`resume()` without re-paying for already-checkpointed nodes.
+Durability: `run()`/`run_many()`/`run_for_review()`/`resume_review()` each open ONE
+`AsyncSqliteSaver` per call (WAL mode), `thread_id = job.id`, `durability="sync"`, so a crashed
+process can pick a job back up via `resume()` without re-paying for checkpointed nodes.
 
-The old `interrupt_before=["render_documents"]` (compile-time, static) is replaced by a
-`human_review` node that calls `interrupt()` (dynamic) — only wired in when
-`build_graph(review_pause=True)`. This is what makes "edit" able to route back through
-`recruiter_sim` for a fresh verdict instead of leaving `recruiter`/`hiring_manager`
-stale against an edited draft (README's old caveat).
+`human_review` calls `interrupt()` (dynamic) and is only wired in when
+`build_graph(review_pause=True)`. "edit" validates the edited draft's facts and pauses again.
 """
 
 from __future__ import annotations
@@ -67,13 +49,8 @@ from langgraph.graph import END, StateGraph
 from langgraph.types import Command, interrupt
 
 from .config import settings
-from .coverage import hard_gap_gate, log_skip, retrieve_evidence, score_coverage
-from .nodes.diagnose import diagnose
-from .nodes.hiring_manager import hiring_manager
-from .nodes.judge_requirements import judge_requirements
-from .nodes.recruiter_sim import log_recruiter_fail, recruiter_gate, recruiter_sim
-from .nodes.requirements import extract_requirements
-from .nodes.review import review, review_gate
+from .coverage import hard_gap_gate, log_skip
+from .nodes.analyze import analyze
 from .nodes.rewrite import rewrite
 from .nodes.validate_facts import fact_gate, log_fact_failure, validate_facts_node
 from .render import render_documents
@@ -112,20 +89,28 @@ def load_job(state: JobState) -> dict:
 
 
 def human_review(state: JobState) -> dict:
-    """Pauses for approve/edit/reject (§9). Only reachable when `build_graph(review_pause=True)`
+    """Pauses for approve/edit/reject. Only reachable when `build_graph(review_pause=True)`
     wired it in — automated `run()`/`run_many()` batch runs never hit this node.
 
     `interrupt()` re-runs this node from the top on resume, so the whole body is cheap
     and side-effect-free apart from returning the decision."""
-    decision = interrupt(
-        {"draft": state.draft, "recruiter": state.recruiter, "hiring_manager": state.hiring_manager}
-    )
+    decision = interrupt({"draft": state.draft, "diagnosis": state.diagnosis})
     action = decision.get("action", "approve")
     if action == "edit":
+        from .profile import Profile
+        from .validators.facts import validate_facts
+
+        draft = Draft.model_validate(decision["draft"])
+        jd_keywords = [kw for r in state.requirements if r.type == "hard" for kw in r.keywords]
+        errors = validate_facts(draft, Profile.load(), jd_keywords=jd_keywords)
         return {
-            "draft": Draft.model_validate(decision["draft"]),
+            "draft": draft,
             "human_decision": "edit",
-            "notes": ["human_review: edited — re-running recruiter_sim/hiring_manager"],
+            "validation_errors": errors,
+            "notes": [
+                "human_review: edited — "
+                + (f"{len(errors)} fact error(s): {errors}" if errors else "facts clean")
+            ],
         }
     if action == "reject":
         return {
@@ -143,58 +128,37 @@ def human_review_gate(state: JobState) -> Literal["approve", "edit", "reject"]:
 def build_graph(skip_render: bool = False, checkpointer=None, review_pause: bool = False):
     g = StateGraph(JobState)
     g.add_node("load_job", load_job)
-    g.add_node("extract_requirements", extract_requirements)
-    g.add_node("retrieve_evidence", retrieve_evidence)
-    g.add_node("score_coverage", score_coverage)
-    g.add_node("judge_requirements", judge_requirements)
+    g.add_node("analyze", analyze)
     g.add_node("log_skip", log_skip)
-    g.add_node("diagnose", diagnose)
     g.add_node("rewrite", rewrite)
     g.add_node("validate_facts", validate_facts_node)
     g.add_node("log_fact_failure", log_fact_failure)
-    g.add_node("review", review)
-    g.add_node("recruiter_sim", recruiter_sim)
-    g.add_node("log_recruiter_fail", log_recruiter_fail)
-    g.add_node("hiring_manager", hiring_manager)
     g.add_node("render_documents", render_documents)
     g.add_node("score_ats", score_ats)
 
     g.set_entry_point("load_job")
-    g.add_edge("load_job", "extract_requirements")
-    g.add_edge("extract_requirements", "retrieve_evidence")
-    g.add_edge("retrieve_evidence", "score_coverage")
-    g.add_edge("score_coverage", "judge_requirements")
-    g.add_conditional_edges(
-        "judge_requirements", hard_gap_gate, {"skip": "log_skip", "proceed": "diagnose"}
-    )
+    g.add_edge("load_job", "analyze")
+    g.add_conditional_edges("analyze", hard_gap_gate, {"skip": "log_skip", "proceed": "rewrite"})
     g.add_edge("log_skip", END)
-    g.add_edge("diagnose", "rewrite")
     g.add_edge("rewrite", "validate_facts")
+
+    if skip_render:
+        after_facts = END
+    elif review_pause:
+        g.add_node("human_review", human_review)
+        g.add_conditional_edges(
+            "human_review", human_review_gate,
+            {"approve": "render_documents", "edit": "human_review", "reject": END},
+        )
+        after_facts = "human_review"
+    else:
+        after_facts = "render_documents"
     g.add_conditional_edges(
-        "validate_facts",
-        fact_gate,
-        {"retry": "rewrite", "clean": "review", "give_up": "log_fact_failure"},
+        "validate_facts", fact_gate,
+        {"retry": "rewrite", "clean": after_facts, "give_up": "log_fact_failure"},
     )
     g.add_edge("log_fact_failure", END)
-    g.add_conditional_edges(
-        "review", review_gate,
-        {"retry": "rewrite", "proceed": END if skip_render else "recruiter_sim"},
-    )
     if not skip_render:
-        g.add_conditional_edges(
-            "recruiter_sim", recruiter_gate,
-            {"hard_fail": "log_recruiter_fail", "proceed": "hiring_manager"},
-        )
-        g.add_edge("log_recruiter_fail", END)
-        if review_pause:
-            g.add_node("human_review", human_review)
-            g.add_edge("hiring_manager", "human_review")
-            g.add_conditional_edges(
-                "human_review", human_review_gate,
-                {"approve": "render_documents", "edit": "recruiter_sim", "reject": END},
-            )
-        else:
-            g.add_edge("hiring_manager", "render_documents")
         g.add_edge("render_documents", "score_ats")
         g.add_edge("score_ats", END)
     return g.compile(checkpointer=checkpointer)
@@ -366,7 +330,7 @@ async def _run_for_review(jd_text: str, title: str, company: str, job_fields: di
 def run_for_review(jd_text: str, title: str = "", company: str = "", **job_fields) -> JobState:
     """Like `run()`, but pauses at `human_review` (§9) — nothing is written to disk until
     `resume_review(..., action="approve")` renders it. The paused state has `draft`,
-    `recruiter` and `hiring_manager` filled in; `artifacts`/`ats` are not yet set."""
+    `diagnosis` filled in; `artifacts`/`ats` are not yet set."""
     return asyncio.run(_run_for_review(jd_text, title, company, job_fields))
 
 
@@ -386,9 +350,8 @@ def resume_review(
     job_id_: str, action: Literal["approve", "edit", "reject"], draft: Draft | None = None
 ) -> JobState:
     """Resume a job paused by `run_for_review` (or paused again after an "edit" loops
-    back through `recruiter_sim`/`hiring_manager`). `action="edit"` re-runs those two
-    nodes against the new draft and pauses again with a fresh verdict — this is what
-    keeps `recruiter`/`hiring_manager` from going stale against an edited draft."""
+    back through `human_review`). `action="edit"` fact-checks the new draft and pauses
+    again with its fact errors, if any."""
     return asyncio.run(_resume_review(job_id_, action, draft))
 
 

@@ -121,6 +121,25 @@ class Draft(BaseModel):
     highlighted_projects: list[str] = []  # profile project ids surfaced this application
 
 
+class DraftOut(BaseModel):
+    """What the `rewrite` LLM call returns. Same fields as `Draft`, except `bullets` is one
+    flat list in print priority instead of a `dict[str, list[DraftBullet]]`.
+
+    Why: Anthropic's structured outputs force `additionalProperties: false` on every
+    object, so a dict's value schema collapses to `{"properties": {}}` and the model can
+    only ever answer `{}` — rewrite silently produced 0 bullets on every run (Bugs.md #1).
+    The section each bullet prints under is derived from the profile
+    (`nodes/rewrite.py::_to_capped_draft`), never trusted from the model: the renderer
+    treats experience and project entries differently and would crash on a mismatch.
+    """
+
+    profile_line: str
+    section_order: list[str]
+    bullets: list[DraftBullet]  # most relevant roles/projects first, strongest bullets first
+    cover_letter: str
+    highlighted_projects: list[str] = []
+
+
 class RecruiterResult(BaseModel):
     """Output of the `recruiter_sim` node — role 4 (CLAUDE.md). Fast, shallow,
     keyword-literal on purpose: simulates the ATS/keyword screen, not a real read."""

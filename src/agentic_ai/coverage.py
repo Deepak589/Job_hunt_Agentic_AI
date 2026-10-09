@@ -18,7 +18,6 @@ import re
 from statistics import mean
 
 from .config import settings
-from .evidence import retrieve_many
 from .profile import Profile
 from .state import JobState, Requirement, Scores
 
@@ -323,6 +322,8 @@ def retrieve_evidence(state: JobState) -> dict:
     Each requirement is queried by its whole text AND by each clause in it; the best hits
     across all of them become its evidence. Still one batched encode for the whole JD.
     """
+    from .evidence import retrieve_many  # lazy: pulls chromadb/torch, unused by the slim graph
+
     queries, spans = [], []
     for r in state.requirements:
         subs = subqueries(r.text)

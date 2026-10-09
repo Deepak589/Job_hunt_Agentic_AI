@@ -14,7 +14,7 @@ from ..llm import invoke_structured, make_structured
 from ..preferences import load_preferences
 from ..profile import Profile
 from ..section_order import classify_role, section_order_for
-from ..state import Draft, DraftBullet, JobState
+from ..state import Draft, DraftBullet, DraftOut, JobState
 
 
 @functools.lru_cache(maxsize=1)
@@ -26,7 +26,7 @@ def _prompt() -> str:
 def _model():
     # claude-sonnet-5 rejects an explicit `temperature` — the param is deprecated for
     # this model (confirmed live: "`temperature` is deprecated for this model").
-    return make_structured(settings.rewrite_model, Draft, max_tokens=16384)
+    return make_structured(settings.rewrite_model, DraftOut, max_tokens=16384)
 
 
 def _profile_bullets_json(profile: Profile) -> str:
@@ -56,6 +56,35 @@ def _capped_bullets(bullets: dict[str, list[DraftBullet]]) -> dict[str, list[Dra
             kept.append(b if text == b.text else b.model_copy(update={"text": text}))
         capped[section] = kept
     return capped
+
+
+def _to_capped_draft(parsed: DraftOut, profile: Profile, order: list[str]) -> Draft:
+    """DraftOut (flat bullet list from the model) -> Draft (bullets by section, which the
+    renderer, validators and review all read). The section comes from the profile, not the
+    model: a bullet printed under the wrong section would crash the renderer. Raises on an
+    empty result — a CV with no bullets must fail loudly here, not pass every downstream
+    check vacuously (Bugs.md #1, #2)."""
+    experience_ids = {e["id"] for e in profile.raw.get("experience", [])}
+    grouped: dict[str, list[DraftBullet]] = {}
+    for b in parsed.bullets:
+        source = profile.by_id(b.source_bullet_id)
+        # An unknown id has no section; "projects" is as good as any — validate_facts
+        # reports the unknown id itself.
+        section = "experience" if source is not None and source.parent_id in experience_ids else "projects"
+        grouped.setdefault(section, []).append(b)
+    capped = _capped_bullets(grouped)
+    if not any(capped.values()):
+        raise RuntimeError(
+            "rewrite returned no bullets — check the schema sent to the API (a dict-typed "
+            "field collapses to an empty object under structured outputs; Bugs.md #1)"
+        )
+    return Draft(
+        profile_line=parsed.profile_line,
+        section_order=order,
+        bullets=capped,
+        cover_letter=parsed.cover_letter,
+        highlighted_projects=parsed.highlighted_projects,
+    )
 
 
 def rewrite(state: JobState, verbose: bool = False) -> dict:
@@ -120,7 +149,7 @@ def rewrite(state: JobState, verbose: bool = False) -> dict:
     ]
 
     parsed, usage = invoke_structured(_model(), messages, model=settings.rewrite_model, node="rewrite", verbose=verbose)
-    draft = parsed.model_copy(update={"section_order": order, "bullets": _capped_bullets(parsed.bullets)})
+    draft = _to_capped_draft(parsed, profile, order)
     return {
         "draft": draft,
         "attempt_count": state.attempt_count + 1,

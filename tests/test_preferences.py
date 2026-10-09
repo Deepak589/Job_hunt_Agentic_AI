@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from agentic_ai.nodes import rewrite as rewrite_mod
 from agentic_ai.preferences import diff_edited_bullets, record_preferences
-from agentic_ai.state import Draft, DraftBullet, Job, JobState
+from agentic_ai.state import Draft, DraftBullet, DraftOut, Job, JobState
 
 
 def _draft(**bullets_by_section) -> Draft:
@@ -12,6 +12,15 @@ def _draft(**bullets_by_section) -> Draft:
         profile_line="p",
         section_order=["experience"],
         bullets=bullets_by_section,
+        cover_letter="c",
+    )
+
+
+def _draft_out() -> DraftOut:
+    return DraftOut(
+        profile_line="p",
+        section_order=["experience"],
+        bullets=[DraftBullet(text="Built X.", source_bullet_id="exp.a.b1")],
         cover_letter="c",
     )
 
@@ -54,11 +63,16 @@ def test_record_preferences_dedupes_on_overlap(tmp_path) -> None:
 
 class _FakeProfile:
     bullets = []
+    raw = {"experience": [{"id": "exp.a"}]}
     never_claim = "never claim things not in the CV"
 
     @staticmethod
     def load():
         return _FakeProfile()
+
+    def by_id(self, bullet_id):
+        from types import SimpleNamespace
+        return SimpleNamespace(parent_id=bullet_id.rsplit(".", 1)[0])
 
 
 def _job_state() -> JobState:
@@ -67,7 +81,7 @@ def _job_state() -> JobState:
     return JobState(job=job, diagnosis=Diagnosis(matches=["stub"]))
 
 
-def _rewrite_common_mocks(monkeypatch, draft: Draft) -> None:
+def _rewrite_common_mocks(monkeypatch, draft) -> None:
     monkeypatch.setattr(rewrite_mod, "Profile", _FakeProfile)
     monkeypatch.setattr(rewrite_mod, "classify_role", lambda jd_text: ("ai_engineer", []))
     monkeypatch.setattr(rewrite_mod, "_model", lambda: "fake-model")
@@ -75,7 +89,7 @@ def _rewrite_common_mocks(monkeypatch, draft: Draft) -> None:
 
 
 def test_rewrite_includes_user_preferences_block_when_file_has_content(monkeypatch, tmp_path) -> None:
-    draft = _draft(experience=[DraftBullet(text="Built X.", source_bullet_id="exp.a.b1")])
+    draft = _draft_out()
     _rewrite_common_mocks(monkeypatch, draft)
     prefs_path = tmp_path / "preferences.yaml"
     record_preferences(["Always lead with the metric."], path=prefs_path)
@@ -96,7 +110,7 @@ def test_rewrite_includes_user_preferences_block_when_file_has_content(monkeypat
 
 
 def test_rewrite_omits_user_preferences_block_when_none_recorded(monkeypatch) -> None:
-    draft = _draft(experience=[DraftBullet(text="Built X.", source_bullet_id="exp.a.b1")])
+    draft = _draft_out()
     _rewrite_common_mocks(monkeypatch, draft)
     monkeypatch.setattr(rewrite_mod, "load_preferences", lambda: [])
 

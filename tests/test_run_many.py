@@ -1,7 +1,7 @@
 """graph.run_many — concurrent multi-JD execution (§ jobpilot add --dir). Every
 LLM-calling node is monkeypatched, same convention/stubs as test_graph_phase3.py, so
 this makes zero real API calls. Uses skip_render=True (the Phase 1/2 path) so the run
-stops at `review` — recruiter_sim/hiring_manager aren't needed to prove ordering and
+stops after validate_facts — rendering/review aren't needed to prove ordering and
 concurrency, and staying off the render path avoids the Chrome/profile-data dependency."""
 
 from __future__ import annotations
@@ -12,14 +12,10 @@ import agentic_ai.graph as graph_mod
 from agentic_ai.state import Diagnosis, Draft, DraftBullet
 
 
-def _fake_extract_requirements(state):
+def _fake_analyze(state):
     # Distinguishable per JD: bake the JD text into a note so we can prove ordering.
-    return {"requirements": [], "notes": [f"stub extract for: {state.job.jd_text}"]}
-
-
-def _fake_diagnose(state):
     diagnosis = Diagnosis(hard_gaps=[], soft_gaps=[], disqualifiers=[], matches=["stub match"])
-    return {"diagnosis": diagnosis, "notes": ["stub diagnose"]}
+    return {"requirements": [], "diagnosis": diagnosis, "notes": [f"stub analyze for: {state.job.jd_text}"]}
 
 
 def _fake_rewrite(state):
@@ -36,16 +32,14 @@ def _fake_rewrite(state):
     return {"draft": draft, "attempt_count": state.attempt_count + 1, "notes": ["stub rewrite"]}
 
 
-def _fake_review(state):
-    scores = state.scores.model_copy(update={"review_score": 9})
-    return {"scores": scores, "validation_errors": [], "notes": ["stub review"]}
+def _fake_validate_facts(state):
+    return {"validation_errors": [], "notes": ["stub validate_facts"]}
 
 
 def _patch_llm_nodes(monkeypatch) -> None:
-    monkeypatch.setattr(graph_mod, "extract_requirements", _fake_extract_requirements)
-    monkeypatch.setattr(graph_mod, "diagnose", _fake_diagnose)
+    monkeypatch.setattr(graph_mod, "analyze", _fake_analyze)
     monkeypatch.setattr(graph_mod, "rewrite", _fake_rewrite)
-    monkeypatch.setattr(graph_mod, "review", _fake_review)
+    monkeypatch.setattr(graph_mod, "validate_facts_node", _fake_validate_facts)
 
 
 def _isolate_db(monkeypatch, tmp_path) -> None:
@@ -115,9 +109,9 @@ def test_run_many_skips_a_job_already_processed(monkeypatch, tmp_path) -> None:
     persist_run(seen, db_path=graph_mod.settings.jobs_db_path)
 
     def _fail(*a, **k):
-        raise AssertionError("already-processed job must not reach extract_requirements")
+        raise AssertionError("already-processed job must not reach analyze")
 
-    monkeypatch.setattr(graph_mod, "extract_requirements", _fail)
+    monkeypatch.setattr(graph_mod, "analyze", _fail)
 
     results = asyncio.run(graph_mod.run_many([jd_text], _skip_render=True))
 
@@ -150,21 +144,22 @@ def test_run_many_persists_cost_from_a_crashed_job(monkeypatch, tmp_path) -> Non
     (or a row with verdict NULL)"; this proves the NULL-row half actually happens."""
     import sqlite3
 
-    def _fake_extract_requirements_with_cost(state):
+    def _fake_analyze_with_cost(state):
         return {
             "requirements": [],
+            "diagnosis": Diagnosis(),
             "llm_calls": [
-                {"node": "extract_requirements", "model": "claude-haiku-4-5",
+                {"node": "analyze", "model": "claude-sonnet-5",
                  "input_tokens": 100, "output_tokens": 50, "cache_read_tokens": 0,
                  "cache_creation_tokens": 0, "cost_usd": 0.0012}
             ],
         }
 
-    def _fake_diagnose_crashes(state):
-        raise RuntimeError("diagnose failed: Invalid json output (stop_reason=max_tokens)")
+    def _fake_rewrite_crashes(state):
+        raise RuntimeError("rewrite failed: Invalid json output (stop_reason=max_tokens)")
 
-    monkeypatch.setattr(graph_mod, "extract_requirements", _fake_extract_requirements_with_cost)
-    monkeypatch.setattr(graph_mod, "diagnose", _fake_diagnose_crashes)
+    monkeypatch.setattr(graph_mod, "analyze", _fake_analyze_with_cost)
+    monkeypatch.setattr(graph_mod, "rewrite", _fake_rewrite_crashes)
     _isolate_db(monkeypatch, tmp_path)
 
     try:

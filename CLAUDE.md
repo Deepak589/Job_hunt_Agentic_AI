@@ -37,15 +37,20 @@ commit. If it was skipped, say so in the closing summary.
 - `pytest` · `ruff` (line-length 100) · `mypy --strict` + pydantic plugin.
 
 ## Pipeline
+Slimmed (branch `slim-agent`) to match the manual flow in `Examples/CLAUDE.md`: one reasoning
+call, deterministic guards around it, a human as the reviewer.
 ```
-load_job → extract_requirements → retrieve_evidence → score_coverage → judge_requirements
-  ├─ hard gap → log_skip → END
-  └─ diagnose → rewrite → validate_facts
+load_job → analyze (ONE LLM call: requirements + per-item verdict vs profile + matches)
+  ├─ hard gap / unmet disqualifier → log_skip → END
+  └─ rewrite → validate_facts (deterministic; retry max 2)
        ├─ fail → log_fact_failure → END
-       └─ review (max 2 loops, min score 7) → recruiter_sim
-            ├─ hard-fail → log_recruiter_fail → END
-            └─ hiring_manager → [human_review: interrupt()] → render_documents → score_ats
+       └─ [human_review: interrupt()] → render_documents → score_ats
 ```
+Removed: separate extract / evidence-retrieval / coverage / judge / diagnose nodes, and the LLM
+`review`, `recruiter_sim`, `hiring_manager` nodes (originals are on `main`). Kept in code after
+`analyze`: the language-below-fluency and on-site-location rails (`coverage.py`), the categorical
+gate, `validate_facts`, rendering, ATS score. `rewrite` must include every profile bullet and only
+reorder by JD relevance (`prompts/rewrite.md`).
 
 ## Commands
 ```bash
@@ -67,31 +72,26 @@ Manual JD input is the primary path; ingest is the supplement.
   texts are tech documents and yields no actionable gap report.
 - **The hard-gap gate is categorical, not a threshold.** A named hard requirement with zero
   evidence is a skip; rewriting cannot fix it (`max_blocking_hard_gaps`, currently 3 — raised
-  from 1 because `judge_requirements`, below, now gives every uncovered hard gap an LLM second
-  opinion first, so what reaches this count is a higher-confidence real gap, not a keyword miss).
+  from 1 because `analyze` now judges every hard requirement against the full profile, so what
+  reaches this count is a higher-confidence real gap, not a keyword miss).
   SOFT coverage stays pure keyword+semantic, untouched.
 - **`validators/facts.py` is deterministic Python, never an LLM.** Highest-value guardrail here.
   Extend it with adversarial cases — especially tech named in the JD but absent from the profile.
   Never route it through a model, never soften it to make a run pass. It only ever receives HARD
   keywords now — a DISQUALIFIER is already proven true by `hard_gap_gate` before a draft exists,
   so re-checking one here was a category error (Bugs.md #2), not a case this file should extend.
-- **`judge_requirements` (LLM, Sonnet) is a deliberate, narrow exception to "deterministic gate
-  only."** It runs after `score_coverage`, on HARD and DISQUALIFIER requirements the
-  keyword/semantic pass could not match — real JD phrasing varies ("EU work authorization" vs
-  "German citizen", "cloud-native infra" vs "owns the Kubernetes/CI/CD/AWS layer") in a way a
-  fixed keyword list keeps missing one word at a time (Bugs.md #2). Guardrail: `unmet` requires
-  either a quoted contradiction already in the profile (disqualifier) or a plain, unambiguous
-  domain mismatch (hard requirement) — never silence. A requirement naming a tech/tool the
-  profile never mentions must come back `unknown`, which asks at review (`open_questions`)
-  instead of auto-gapping. It never touches SOFT coverage.
-  **Deliberate asymmetry:** a DISQUALIFIER confirmed `unmet` is still an immediate, uncounted
-  skip (`scoring/ats.py`'s final gate zeroes any unmet disqualifier regardless of draft quality,
-  so there is no point drafting one). A HARD requirement confirmed `unmet` instead joins the
-  `max_blocking_hard_gaps` budget above. Disqualifiers are not "softer" now — only less likely
-  to be misjudged on wording.
-- **`extract_requirements` and `recruiter_sim` are stateless on purpose.** Give the extractor the
-  profile and it finds the requirements it expects, destroying the gap analysis. A real first-pass
-  screen has no context either.
+- **`analyze` (one LLM call) decides coverage; code overrides it on two known blind spots.**
+  `unmet` needs a quoted contradiction in the profile (disqualifier) or a stated absence (hard
+  item) — never silence. A tool/fact the profile never mentions comes back `unknown`, which asks
+  at review (`open_questions`) instead of gapping. Code then re-decides a language below the
+  profile's level (`_blocked_language`) and any on-site clause (`_location_reachable`), whatever
+  the model said. A DISQUALIFIER `unmet` is an immediate skip; a HARD `unmet` joins the
+  `max_blocking_hard_gaps` budget.
+- **Deliberate reversal of the old "extractor never sees the profile" rule.** `analyze` reads JD
+  and profile together, as the manual flow in `Examples/CLAUDE.md` does. The risk is the one the
+  old rule guarded against: the model listing requirements it expects the candidate to have.
+  Mitigation: the JD is sent first, and the prompt says the list comes from the JD alone. Watch
+  for it in `evals/` (a golden JD whose requirement count drops after this change is the tell).
 - **`interrupt()` requires a checkpointer.** `human_review` is a dynamic node, not
   `interrupt_before` — that was a real runtime bug in v1.
 - **No supervisor agent.** The LangGraph edges *are* the orchestration; every routing decision is
