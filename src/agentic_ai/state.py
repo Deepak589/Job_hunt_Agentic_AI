@@ -64,6 +64,22 @@ class Requirement(BaseModel):
         return max((e.similarity for e in self.evidence), default=0.0)
 
 
+def job_id(source: str, url: str, jd_text: str) -> str:
+    """Identifies the POSTING, not the text (solution.md step 1): same source+url fetched
+    twice is the same job even if the board re-serves slightly different whitespace. Manual
+    pastes carry no url, so they fall back to the old content-hash id — content_hash
+    (Job, below) already covers text identity for those.
+
+    Lives here, beside `Job._fill_content_hash` which computes the same digest, rather than
+    in graph.py: it is a pure hash with no graph dependency, and importing it from graph
+    dragged langgraph + aiosqlite into every caller (all 7 sourcing modules and the agent
+    path) for one line of hashlib. `graph.job_id` is re-exported, so existing imports work.
+    """
+    if url:
+        return hashlib.sha256(f"{source}:{url}".encode()).hexdigest()[:16]
+    return hashlib.sha256(jd_text.strip().encode()).hexdigest()[:16]
+
+
 class Job(BaseModel):
     # solution.md step 1: id identifies the POSTING (source+url), so a re-fetch of the
     # same unchanged listing dedupes; content_hash identifies the TEXT, so an edited JD

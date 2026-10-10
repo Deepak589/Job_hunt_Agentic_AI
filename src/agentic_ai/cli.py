@@ -900,10 +900,9 @@ def agent_draft(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Print the raw model response."),
 ) -> None:
     """Run one JD through the single-call agent path (prompts/agent_cv.md)."""
-    from .graph import job_id
     from .nodes.agent_cv import agent_cv
     from .profile import Profile
-    from .state import Job, JobState
+    from .state import Job, JobState, job_id
     from .validators.facts import validate_facts
 
     if file and stdin:

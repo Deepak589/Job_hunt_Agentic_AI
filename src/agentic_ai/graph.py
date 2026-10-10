@@ -38,7 +38,6 @@ process can pick a job back up via `resume()` without re-paying for checkpointed
 from __future__ import annotations
 
 import asyncio
-import hashlib
 from contextlib import asynccontextmanager
 from typing import Literal
 
@@ -55,7 +54,7 @@ from .nodes.rewrite import rewrite
 from .nodes.validate_facts import fact_gate, log_fact_failure, validate_facts_node
 from .render import render_documents
 from .scoring.ats import score_ats
-from .state import Draft, Job, JobState
+from .state import Draft, Job, JobState, job_id  # job_id re-exported: `from .graph import job_id` still works
 
 
 def _tracing_callbacks() -> list:
@@ -71,16 +70,6 @@ def _tracing_callbacks() -> list:
         host=settings.langfuse_host,
     )
     return [CallbackHandler(public_key=settings.langfuse_public_key)]
-
-
-def job_id(source: str, url: str, jd_text: str) -> str:
-    """Identifies the POSTING, not the text (solution.md step 1): same source+url fetched
-    twice is the same job even if the board re-serves slightly different whitespace. Manual
-    pastes carry no url, so they fall back to the old content-hash id — content_hash
-    (state.Job) already covers text identity for those."""
-    if url:
-        return hashlib.sha256(f"{source}:{url}".encode()).hexdigest()[:16]
-    return hashlib.sha256(jd_text.strip().encode()).hexdigest()[:16]
 
 
 def load_job(state: JobState) -> dict:
