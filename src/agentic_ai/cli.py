@@ -878,3 +878,112 @@ def run(
 
 if __name__ == "__main__":
     app()
+
+
+# ---------------------------------------------------------------------------
+# agent-draft — the single-call baseline (branch `agent-path`).
+#
+# Deliberately NOT wired into `add`/`run`/the graph: it is a second entry point so the
+# two paths can be run over the same JDs and compared on numbers. `validate_facts` runs
+# here in REPORT mode — the errors are counted and printed, never used to block, because
+# what we are measuring is how many a judgment-first path actually produces.
+# ---------------------------------------------------------------------------
+@app.command("agent-draft")
+def agent_draft(
+    file: Path | None = typer.Option(None, "--file", "-f", help="Path to a saved JD."),
+    stdin: bool = typer.Option(False, "--stdin", help="Read the JD from stdin."),
+    title: str = typer.Option("", "--title", help="Job title, if known."),
+    company: str = typer.Option("", "--company", help="Company, if known."),
+    location: str = typer.Option("", "--location", help="Where the job is — decides on-site requirements."),
+    render: bool = typer.Option(False, "--render", help="Also render the PDFs and score ATS (needs Chrome)."),
+    json_output: bool = typer.Option(False, "--json", help="One structured JSON line instead of the report."),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Print the raw model response."),
+) -> None:
+    """Run one JD through the single-call agent path (prompts/agent_cv.md)."""
+    from .graph import job_id
+    from .nodes.agent_cv import agent_cv
+    from .profile import Profile
+    from .state import Job, JobState
+    from .validators.facts import validate_facts
+
+    if file and stdin:
+        raise typer.BadParameter("--file and --stdin are mutually exclusive")
+    if file:
+        jd_text = file.read_text()
+    elif stdin:
+        jd_text = sys.stdin.read()
+    else:
+        raise typer.BadParameter("pass --file or --stdin")
+    if not jd_text.strip():
+        raise typer.BadParameter("empty job description")
+
+    _check_budget()
+    result = agent_cv(jd_text, job_location=location, verbose=verbose)
+
+    # Report mode: same validator, same hard-keyword input as the graph, no blocking.
+    hard_keywords = [kw for r in result.requirements if r.type == "hard" for kw in r.keywords]
+    fact_errors = validate_facts(result.draft, Profile.load(), jd_keywords=hard_keywords)
+
+    state = JobState(
+        job=Job(
+            id=job_id("manual", "", jd_text), source="manual", url="",
+            title=title, company=company, location=location, jd_text=jd_text,
+        ),
+        requirements=result.requirements,
+        diagnosis=result.diagnosis,
+        scores=result.scores,
+        draft=result.draft,
+        validation_errors=fact_errors,
+        attempt_count=1,
+    )
+
+    ats_total = None
+    if render:
+        from .render import render_documents
+        from .scoring.ats import score_ats
+
+        state = state.model_copy(update=render_documents(state))
+        state = state.model_copy(update=score_ats(state))
+        ats_total = state.ats.total if state.ats else None
+
+    counts = {t: sum(1 for r in result.requirements if r.type == t) for t in ("hard", "soft", "disqualifier")}
+    payload = {
+        "path": "agent",
+        "job_id": state.job.id,
+        "requirement_counts": counts,
+        "hard_coverage": round(result.scores.hard_coverage, 4),
+        "soft_coverage": round(result.scores.soft_coverage, 4),
+        "hard_gaps": result.diagnosis.hard_gaps,
+        "disqualifiers": result.diagnosis.disqualifiers,
+        "bullets": sum(len(v) for v in result.draft.bullets.values()),
+        "self_score": result.self_score,
+        "recruiter_verdict": result.recruiter_verdict,
+        "final_verdict": result.final_verdict,
+        "verdict_reason": result.verdict_reason,
+        "fact_errors": fact_errors,
+        "fact_error_count": len(fact_errors),
+        "ats_total": ats_total,
+        "cost_usd": result.total_cost_usd,
+    }
+
+    if json_output:
+        print(json.dumps(payload))
+        return
+
+    console.print(f"\n[bold]AGENT PATH[/bold]  job {state.job.id}")
+    console.print(f"requirements {counts}  hard_coverage {payload['hard_coverage']}")
+    if result.diagnosis.hard_gaps:
+        console.print(f"[yellow]hard gaps:[/yellow] {'; '.join(result.diagnosis.hard_gaps)}")
+    if result.diagnosis.disqualifiers:
+        console.print(f"[red]disqualifiers:[/red] {'; '.join(result.diagnosis.disqualifiers)}")
+    console.print(f"bullets {payload['bullets']}  self_score {result.self_score}/10  recruiter {result.recruiter_verdict}")
+    console.print(f"[bold]verdict:[/bold] {result.final_verdict} — {result.verdict_reason}")
+    if fact_errors:
+        console.print(f"\n[yellow]validate_facts (report only) — {len(fact_errors)} error(s):[/yellow]")
+        for e in fact_errors:
+            console.print(f"  - {e}")
+    else:
+        console.print("\n[green]validate_facts: clean[/green]")
+    if ats_total is not None:
+        console.print(f"ATS {ats_total}/100")
+    console.print(f"cost ${result.total_cost_usd}")
