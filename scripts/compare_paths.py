@@ -21,24 +21,44 @@ from agentic_ai.profile import Profile
 from agentic_ai.validators.facts import validate_facts
 
 
+def _dump_draft(jd_name: str, path: str, draft, errors: list[str]) -> str:
+    """Persist the draft a row describes. Without this a `fact_error_count` is unreadable:
+    'claims fluency in german' could be a fabricated claim or the honest "my German is A2"
+    that prompts/agent_cv.md explicitly asks for, and the count alone cannot tell them
+    apart."""
+    out = Path("out/compare") / f"{jd_name.replace('.txt', '')}__{path}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps({
+        "profile_line": draft.profile_line,
+        "section_order": draft.section_order,
+        "bullets": {s: [b.model_dump() for b in bs] for s, bs in draft.bullets.items()},
+        "cover_letter": draft.cover_letter,
+        "highlighted_projects": draft.highlighted_projects,
+        "fact_errors": errors,
+    }, indent=2))
+    return str(out)
+
+
 def _counts(reqs) -> dict[str, int]:
     return {t: sum(1 for r in reqs if r.type == t) for t in ("hard", "soft", "disqualifier")}
 
 
-async def _graph_row(jd_text: str, location: str) -> dict:
+async def _graph_row(jd_text: str, location: str, jd_name: str) -> dict:
     """One graph run, no render (Chrome-free), no DB dedupe."""
     from agentic_ai import graph as g
-    from agentic_ai.state import Job, JobState
+    from agentic_ai.state import Job, JobState, job_id
 
     # skip_render=True: no Chrome, and no checkpointer needed (no human_review node,
     # so nothing calls interrupt()). A fresh thread_id per comparison keeps the old
     # pipeline's checkpoints from leaking in.
     compiled = g.build_graph(review_pause=False, skip_render=True)
-    job = Job(id=g.job_id("manual", "", jd_text), source="manual", url="", jd_text=jd_text, location=location)
+    job = Job(id=job_id("manual", "", jd_text), source="manual", url="", title="", jd_text=jd_text, location=location)
     state = await compiled.ainvoke(JobState(job=job), {"configurable": {"thread_id": f"cmp:{job.id}"}})
     state = JobState(**state) if isinstance(state, dict) else state
     bullets = sum(len(v) for v in state.draft.bullets.values()) if state.draft else 0
+    dump = _dump_draft(jd_name, "graph", state.draft, state.validation_errors) if state.draft else None
     return {
+        "draft_file": dump,
         "path": "graph",
         "requirement_counts": _counts(state.requirements),
         "hard_coverage": round(state.scores.hard_coverage, 4),
@@ -50,12 +70,13 @@ async def _graph_row(jd_text: str, location: str) -> dict:
     }
 
 
-def _agent_row(jd_text: str, location: str) -> dict:
+def _agent_row(jd_text: str, location: str, jd_name: str) -> dict:
     result = agent_cv(jd_text, job_location=location)
     hard_keywords = [kw for r in result.requirements if r.type == "hard" for kw in r.keywords]
     errors = validate_facts(result.draft, Profile.load(), jd_keywords=hard_keywords)
     return {
         "path": "agent",
+        "draft_file": _dump_draft(jd_name, "agent", result.draft, errors),
         "requirement_counts": _counts(result.requirements),
         "hard_coverage": round(result.scores.hard_coverage, 4),
         "bullets": sum(len(v) for v in result.draft.bullets.values()),
@@ -82,7 +103,7 @@ def main() -> None:
         print(f"\n=== {jd.name} ===")
         if not args.agent_only:
             try:
-                r = asyncio.run(_graph_row(text, args.location))
+                r = asyncio.run(_graph_row(text, args.location, jd.name))
             except Exception as exc:  # a crash is a result worth recording, not a stop
                 r = {"path": "graph", "error": f"{type(exc).__name__}: {exc}"}
             r["jd"] = jd.name
@@ -90,7 +111,7 @@ def main() -> None:
             print(json.dumps(r, indent=2))
         if not args.graph_only:
             try:
-                r = _agent_row(text, args.location)
+                r = _agent_row(text, args.location, jd.name)
             except Exception as exc:
                 r = {"path": "agent", "error": f"{type(exc).__name__}: {exc}"}
             r["jd"] = jd.name

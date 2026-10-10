@@ -945,9 +945,29 @@ def agent_draft(
         state = state.model_copy(update=score_ats(state))
         ats_total = state.ats.total if state.ats else None
 
+    # Persist the draft. A fact_error_count with no draft behind it cannot be acted on —
+    # "claims fluency in german" is either a fabrication or the honest "my German is A2"
+    # that prompts/agent_cv.md asks for, and only the text tells you which.
+    draft_dir = Path("out/agent_draft")  # same tree render.py writes to; gitignored
+    draft_dir.mkdir(parents=True, exist_ok=True)
+    draft_file = draft_dir / f"{state.job.id}.json"
+    draft_file.write_text(json.dumps({
+        "job_id": state.job.id,
+        "profile_line": result.draft.profile_line,
+        "section_order": result.draft.section_order,
+        "bullets": {s: [b.model_dump() for b in bs] for s, bs in result.draft.bullets.items()},
+        "cover_letter": result.draft.cover_letter,
+        "highlighted_projects": result.draft.highlighted_projects,
+        "requirements": [r.model_dump() for r in result.requirements],
+        "fact_errors": fact_errors,
+        "final_verdict": result.final_verdict,
+        "verdict_reason": result.verdict_reason,
+    }, indent=2, default=str))
+
     counts = {t: sum(1 for r in result.requirements if r.type == t) for t in ("hard", "soft", "disqualifier")}
     payload = {
         "path": "agent",
+        "draft_file": str(draft_file),
         "job_id": state.job.id,
         "requirement_counts": counts,
         "hard_coverage": round(result.scores.hard_coverage, 4),
@@ -986,3 +1006,4 @@ def agent_draft(
     if ats_total is not None:
         console.print(f"ATS {ats_total}/100")
     console.print(f"cost ${result.total_cost_usd}")
+    console.print(f"draft saved: {draft_file}")
