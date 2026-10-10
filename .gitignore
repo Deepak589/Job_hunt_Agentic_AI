@@ -27,3 +27,15 @@ templates/assets/photo.jpg
 
 # macOS
 .DS_Store
+
+# generated application packages — personal documents, never committed
+# (CLAUDE.md: "Never commit ... the CV PDF or anything in out/").
+# jd.md / reason.md under Examples/ stay tracked: they are the decision record.
+Examples/**/*.pdf
+Examples/**/*.docx
+
+# scratch JD inbox
+JD/
+
+# run log — append-only, churns on every run
+data/jobpilot.log.jsonl
