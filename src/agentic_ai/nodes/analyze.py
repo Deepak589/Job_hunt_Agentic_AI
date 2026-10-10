@@ -16,7 +16,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from ..config import settings
-from ..coverage import _blocked_language, _is_onsite, _location_reachable, location_terms
+from ..coverage import _is_onsite, _location_reachable, language_requirement_verdict, location_terms
 from ..llm import invoke_structured, make_structured
 from ..profile import Profile
 from ..state import Diagnosis, JobState, ReqType, Requirement, Scores
@@ -74,8 +74,13 @@ def _apply_rails(reqs: list[Requirement], job_location: str) -> list[Requirement
     out = []
     for r in reqs:
         if r.type == "disqualifier":
-            if _blocked_language(r):  # a language the profile lists below fluency
+            lang = language_requirement_verdict(r)
+            if lang == "unmet":  # demand sits further above the profile than the gap ceiling
                 r = r.model_copy(update={"covered": False, "unknown": False, "covered_by": None})
+            elif lang == "unknown":  # one step above — ask at review, never skip
+                r = r.model_copy(update={"covered": False, "unknown": True, "covered_by": None})
+            elif lang == "met":
+                r = r.model_copy(update={"covered": True, "unknown": False, "covered_by": "keyword"})
             elif _is_onsite(r):  # decided by where the job is, never by the CV
                 reachable = _location_reachable(job_location, places)
                 r = r.model_copy(update={

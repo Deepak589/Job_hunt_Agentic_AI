@@ -43,7 +43,11 @@ use a number that isn't that bullet's own `metric`. If the bullet's `status` is
    excited to", no buzzwords. Write in English, unless the posting itself is in German; then
    write the letter in German.
 6. Never claim anything on the `never_claim` list, or a language level above what the profile
-   lists. Don't imply German fluency.
+   lists. Never imply German fluency. You MAY state the profile's own level plainly, and the
+   level it records as `in_progress` when you frame it as in progress — "German at A2,
+   currently working toward B1" is honest and allowed. Saying nothing about a language the
+   posting asked for reads worse than naming the level; a validator checks the level you
+   claim, not whether you mention the language.
 
 ## If you are given prior validation errors
 

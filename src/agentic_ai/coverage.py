@@ -123,34 +123,18 @@ FLUENT_LEVELS = ("fluent", "native", "c1", "c2", "bilingual")
 FULL_TIME_HOURS = 60
 
 
-@functools.lru_cache(maxsize=1)
-def unclaimable_languages() -> frozenset[str]:
-    """Languages the profile lists below professional fluency.
+def language_requirement_verdict(req: Requirement) -> str | None:
+    """"met" | "unknown" | "unmet" for this requirement's language demand, else None.
 
-    Keeping these out of `keyword_set` is not enough. "Fluency in English and German is
-    required" is ONE requirement carrying TWO languages, and `_keyword_hit` is an any-match:
-    `english` alone marked it covered and a German-mandatory job cleared the gate. A named
-    language below fluency blocks the whole requirement, whatever else in it matches.
+    Compares the level the JD asks for against the level the profile holds
+    (`languages.language_verdict`) instead of asking the old yes/no question "is this
+    language below fluency". The old test skipped a posting wanting Grundkenntnisse from a
+    candidate who had more than Grundkenntnisse, and read a bare "German required" as a
+    fluency demand.
     """
-    langs = Profile.load().raw.get("constraints", {}).get("languages", [])
-    return frozenset(
-        _normalize(lang["name"])
-        for lang in langs
-        if not any(lvl in str(lang.get("level", "")).lower() for lvl in FLUENT_LEVELS)
-    )
+    from .languages import language_verdict
 
-
-def _blocked_language(req: Requirement) -> str | None:
-    """The unclaimable language this requirement demands, or None.
-
-    Reads the requirement TEXT, not just `keywords` — on the Bain posting the extractor
-    emitted only `english` for a clause naming both languages.
-    """
-    words = set(_normalize(req.text).split())
-    for lang in unclaimable_languages():
-        if lang in words:
-            return lang
-    return None
+    return language_verdict(req.text, Profile.load().raw, settings.max_language_gap_steps)
 
 
 @functools.lru_cache(maxsize=2)
@@ -355,11 +339,19 @@ def score_coverage(state: JobState) -> dict:
     places = location_terms()
     scored: list[Requirement] = []
     for r in state.requirements:
-        blocked = _blocked_language(r)
+        lang = language_requirement_verdict(r)
+        blocked = lang == "unmet"
         hit = None if blocked else _keyword_hit(r, terms)
         semantic = not blocked and r.best_similarity >= settings.sem_threshold
         covered = semantic or hit is not None
         unknown = not covered and r.type == "disqualifier" and _is_unrecorded_fact(r)
+
+        # A language demand one step above the profile's level is a question for review,
+        # never a silent skip: the candidate can state the honest position in the letter.
+        if lang == "unknown":
+            covered, unknown = False, True
+        elif lang == "met":
+            covered = True
 
         # An on-site clause is decided by where the job is, never by the CV.
         if r.type == "disqualifier" and not covered and _is_onsite(r):

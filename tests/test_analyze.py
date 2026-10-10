@@ -19,7 +19,7 @@ def _req(text, type_, verdict, evidence="profile fact"):
 @pytest.fixture(autouse=True)
 def _no_profile_rails(monkeypatch):
     """Rails read the private profile; neutralise by default, individual tests re-enable."""
-    monkeypatch.setattr(analyze_mod, "_blocked_language", lambda r: None)
+    monkeypatch.setattr(analyze_mod, "language_requirement_verdict", lambda r: None)
     monkeypatch.setattr(analyze_mod, "location_terms", lambda: frozenset({"berlin", "munich"}))
 
 
@@ -74,12 +74,39 @@ def test_too_many_hard_gaps_skip_but_few_do_not() -> None:
     assert hard_gap_gate(JobState(job=job, requirements=to_state_update(many, "")[0])) == "skip"
 
 
-def test_blocked_language_overrides_a_model_met(monkeypatch) -> None:
-    monkeypatch.setattr(analyze_mod, "_blocked_language", lambda r: "german")
+def test_unmet_language_overrides_a_model_met(monkeypatch) -> None:
+    """A demand further above the profile than the gap ceiling is a skip, model be damned."""
+    monkeypatch.setattr(analyze_mod, "language_requirement_verdict", lambda r: "unmet")
     parsed = AnalysisOut(requirements=[_req("Fluent German and English", "disqualifier", "met")], matches=[])
     [r], _, _ = to_state_update(parsed, "Berlin")
 
     assert not r.covered and not r.unknown
+
+
+def test_language_one_step_above_profile_asks_instead_of_skipping(monkeypatch) -> None:
+    """"gute Deutschkenntnisse" against A2+B1-in-progress: a review question, not a skip.
+
+    The old binary rail made every German demand a hard gate, which skipped postings the
+    candidate can honestly answer with "A2 completed, working toward B1".
+    """
+    monkeypatch.setattr(analyze_mod, "language_requirement_verdict", lambda r: "unknown")
+    parsed = AnalysisOut(
+        requirements=[_req("Gute Deutschkenntnisse", "disqualifier", "unmet")], matches=[]
+    )
+    [r], _, _ = to_state_update(parsed, "Berlin")
+
+    assert not r.covered and r.unknown
+
+
+def test_language_met_overrides_a_model_unmet(monkeypatch) -> None:
+    """Grundkenntnisse against A2: the model's pessimism does not get the last word."""
+    monkeypatch.setattr(analyze_mod, "language_requirement_verdict", lambda r: "met")
+    parsed = AnalysisOut(
+        requirements=[_req("Grundkenntnisse Deutsch", "disqualifier", "unmet")], matches=[]
+    )
+    [r], _, _ = to_state_update(parsed, "Berlin")
+
+    assert r.covered and not r.unknown
 
 
 def test_onsite_clause_is_decided_by_job_location_not_the_model() -> None:

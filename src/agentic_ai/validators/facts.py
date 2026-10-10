@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import re
 
-from ..coverage import FLUENT_LEVELS, _eligibility_terms, _normalize, location_terms
+from ..coverage import _eligibility_terms, _normalize, location_terms
 from ..profile import NUMERIC_RE, Profile
 from ..state import Draft
 
@@ -97,19 +97,26 @@ def _local_tech(profile: Profile, source_bullet_id: str) -> set[str]:
 
 
 def _unclaimable_language_error(draft: Draft, profile: Profile) -> list[str]:
-    langs = profile.raw.get("constraints", {}).get("languages", [])
-    unclaimable = {
-        _normalize(lang["name"])
-        for lang in langs
-        if not any(lvl in str(lang.get("level", "")).lower() for lvl in FLUENT_LEVELS)
-    }
-    if not unclaimable:
-        return []
-    errors = []
+    """Language claims a draft may not make, checked per sentence and by LEVEL.
+
+    The old version errored whenever the word "german" appeared anywhere in the draft. That
+    made the sentence the CV rules explicitly ask for — name the gap directly, "A2
+    completed, working toward B1" — impossible to write, while a genuinely false "fluent in
+    German" was caught by the same blunt rule for the wrong reason. It also reported every
+    hit as "never_claim forbids this" when the source was the language level, not
+    `never_claim` (which is currently empty).
+    """
+    from ..languages import claim_error
+
+    raw = profile.raw
+    errors: list[str] = []
     for loc, text in _draft_text(draft):
-        words = set(_normalize(text).split())
-        for lang in unclaimable & words:
-            errors.append(f"{loc}: claims fluency in {lang} — never_claim forbids this")
+        for sentence in re.split(r"(?<=[.!?])\s+|\n+", text):
+            if not sentence.strip():
+                continue
+            err = claim_error(sentence, raw)
+            if err:
+                errors.append(f"{loc}: {err}")
     return errors
 
 
@@ -133,6 +140,15 @@ def validate_facts(draft: Draft, profile: Profile, jd_keywords: list[str] = ()) 
     # be EU-eligible" tagged hard). Disqualifier keywords never reach this function at all
     # (see module docstring), so this set is no longer the primary defense it once was.
     not_fabricatable = location_terms() | {_normalize(t) for t in _eligibility_terms(profile.raw)}
+    # Languages the profile records are stated facts, not fabricable tech. "english" was
+    # being reported as an unevidenced JD term while the profile lists English as Fluent.
+    # The LEVEL claim is policed separately by `_unclaimable_language_error`, so naming a
+    # language here is safe; overclaiming it is not.
+    from ..languages import LANG_ALIASES, profile_languages
+
+    for rec in profile_languages(profile.raw):
+        key = str(rec.get("name", "")).strip().lower()
+        not_fabricatable |= {_normalize(a) for a in LANG_ALIASES.get(key, (key,))} | {_normalize(key)}
 
     for section, bullets in draft.bullets.items():
         for b in bullets:

@@ -22,6 +22,7 @@ from agentic_ai.cv_extract import (
     SkillsList,
 )
 from agentic_ai.nodes.analyze import AnalysisOut
+from agentic_ai.nodes.agent_cv import AgentCvOut
 from agentic_ai.nodes.rewrite import _to_capped_draft
 from agentic_ai.profile import Profile
 from agentic_ai.section_order import RoleClassification
@@ -41,6 +42,7 @@ SRC = ROOT / "src" / "agentic_ai"
 # fails if a new call site is added without extending this.
 SCHEMAS = {
     "DraftOut": DraftOut,
+    "AgentCvOut": AgentCvOut,
     "AnalysisOut": AnalysisOut,
     "RoleClassification": RoleClassification,
     "Identity": Identity,

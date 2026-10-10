@@ -83,10 +83,21 @@ Manual JD input is the primary path; ingest is the supplement.
 - **`analyze` (one LLM call) decides coverage; code overrides it on two known blind spots.**
   `unmet` needs a quoted contradiction in the profile (disqualifier) or a stated absence (hard
   item) — never silence. A tool/fact the profile never mentions comes back `unknown`, which asks
-  at review (`open_questions`) instead of gapping. Code then re-decides a language below the
-  profile's level (`_blocked_language`) and any on-site clause (`_location_reachable`), whatever
-  the model said. A DISQUALIFIER `unmet` is an immediate skip; a HARD `unmet` joins the
-  `max_blocking_hard_gaps` budget.
+  at review (`open_questions`) instead of gapping. Code then re-decides the language demand
+  (`languages.language_verdict`, via `coverage.language_requirement_verdict`) and any on-site
+  clause (`_location_reachable`), whatever the model said. A DISQUALIFIER `unmet` is an
+  immediate skip; a HARD `unmet` joins the `max_blocking_hard_gaps` budget.
+- **Language is a CEFR comparison, not a below-fluency boolean.** The demand the JD states is
+  parsed to a level and compared against the level the profile holds. `met` at or below it,
+  `unknown` within `max_language_gap_steps` (1) above — a review question, never a skip — and
+  `unmet` beyond that. The old boolean failed both ways at once: it skipped a posting asking
+  for Grundkenntnisse from a candidate holding more than that, and read a bare "German
+  required" as a fluency demand. The weakest language in a compound requirement still decides
+  ("Fluency in English and German"), which is why the any-match keyword hit alone never
+  settles a language. `validators/facts.py` polices the level a draft CLAIMS, not whether it
+  mentions the language: the profile's own level may be stated plainly, and its `in_progress`
+  level when framed as in progress ("A2 completed, working toward B1"). Country names are not
+  language mentions — "authorized to work in Germany" is not a German requirement.
 - **Deliberate reversal of the old "extractor never sees the profile" rule.** `analyze` reads JD
   and profile together, as the manual flow in `Examples/CLAUDE.md` does. The risk is the one the
   old rule guarded against: the model listing requirements it expects the candidate to have.

@@ -60,7 +60,10 @@ When `metric` is set, the same string must appear in `text`.
 ## Never claim
 
 - Never a skill, tool or number with no source in the profile.
-- Never a language level above what the profile states.
+- Never a language level above what the profile states. You MAY state that level plainly,
+  and the `in_progress` level when framed as in progress ("completed A2 German, currently
+  working toward B1"). When a posting asks for a language the profile holds only partly,
+  name the level honestly rather than avoiding the subject.
 - Never anything in the profile's `never_claim` list.
 - Honest framing of what the profile does hold is not a fabrication: naming the umbrella a
   JD uses ("generative AI", "agentic AI") is fine when the profile's own work is that thing.
