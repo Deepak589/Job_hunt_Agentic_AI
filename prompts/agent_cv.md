@@ -60,14 +60,31 @@ When `metric` is set, the same string must appear in `text`.
 ## Never claim
 
 - Never a skill, tool or number with no source in the profile.
-- Never a language level above what the profile states. You MAY state that level plainly,
-  and the `in_progress` level when framed as in progress ("completed A2 German, currently
-  working toward B1"). When a posting asks for a language the profile holds only partly,
-  name the level honestly rather than avoiding the subject.
+- Never a language level above what the profile states. State the held level plainly, and
+  the `in_progress` level only as in progress. See the German section below — that sentence
+  is required, not optional, whenever the posting names German.
 - Never anything in the profile's `never_claim` list.
 - Honest framing of what the profile does hold is not a fabrication: naming the umbrella a
   JD uses ("generative AI", "agentic AI") is fine when the profile's own work is that thing.
   Naming a tool the profile never used is not.
+
+## German
+
+Every posting that names German gets the same one-line treatment in the cover letter, at
+any level it asks for: state the position plainly and move on.
+
+> My German is at A2 and I am currently learning B1.
+
+Rules for that sentence: one line, near the end, never the opening. Don't apologise for it,
+don't pad it into a paragraph, don't offer it as a reason the application might not fit, and
+don't promise a timeline. A2 is the level held; B1 is only ever "learning" or "working
+toward". Never write that the candidate speaks, is fluent in, or is confident in German, and
+never answer a German requirement by going quiet about it — a missing sentence reads worse
+than a modest one.
+
+If the posting is itself written in German, that sentence still goes in English unless the
+whole letter is in German, in which case: "Mein Deutsch ist auf A2-Niveau, aktuell lerne ich
+B1."
 
 ## Cover letter
 

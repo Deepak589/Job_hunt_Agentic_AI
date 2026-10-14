@@ -87,12 +87,19 @@ Manual JD input is the primary path; ingest is the supplement.
   (`languages.language_verdict`, via `coverage.language_requirement_verdict`) and any on-site
   clause (`_location_reachable`), whatever the model said. A DISQUALIFIER `unmet` is an
   immediate skip; a HARD `unmet` joins the `max_blocking_hard_gaps` budget.
-- **Language is a CEFR comparison, not a below-fluency boolean.** The demand the JD states is
-  parsed to a level and compared against the level the profile holds. `met` at or below it,
-  `unknown` within `max_language_gap_steps` (1) above — a review question, never a skip — and
-  `unmet` beyond that. The old boolean failed both ways at once: it skipped a posting asking
-  for Grundkenntnisse from a candidate holding more than that, and read a bare "German
-  required" as a fluency demand. The weakest language in a compound requirement still decides
+- **A language demand never skips a job.** The demand the JD states is parsed to a CEFR level
+  and compared against the level the profile holds (`languages.py`): `met` at or below it,
+  `unknown` above it. `max_language_gap_steps` ships at 5 — the full width of the scale — so
+  `unmet` is unreachable for a language and every German demand reaches human review instead,
+  with the cover letter carrying one line: "My German is at A2 and I am currently learning
+  B1." That sentence is mandatory in `prompts/rewrite.md` and `prompts/agent_cv.md` whenever a
+  posting names German, and silence about it is treated as worse than a modest line. Policy,
+  not laxity: a stated German requirement is frequently softer than it reads on Berlin
+  postings, and a silent skip removed the choice. Set `JOBPILOT_MAX_LANGUAGE_GAP_STEPS=1` to
+  make anything more than one step above the profile a skip again. The guard that remains is
+  that a demand above the held level is never marked *met* — the weakest language in a
+  compound requirement still decides ("Fluency in English and German"), so an any-match
+  keyword hit on `english` cannot satisfy the German half. The weakest language in a compound requirement still decides
   ("Fluency in English and German"), which is why the any-match keyword hit alone never
   settles a language. `validators/facts.py` polices the level a draft CLAIMS, not whether it
   mentions the language: the profile's own level may be stated plainly, and its `in_progress`

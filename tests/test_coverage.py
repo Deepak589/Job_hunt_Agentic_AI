@@ -128,15 +128,21 @@ def test_too_many_hard_gaps_skip_and_name_them() -> None:
     assert "Python" not in reason, "covered requirements must not appear in the skip reason"
 
 
-def test_german_fluency_disqualifier_skips() -> None:
-    """The profile lists German at A1/A2 and never_claim forbids claiming fluency.
+def test_german_demand_asks_instead_of_skipping() -> None:
+    """Policy: a German demand is never a skip, at any level the posting asks for.
 
-    Regression guard: an earlier keyword set added every listed language regardless of
-    level, so "german" matched and a German-required job passed the gate.
+    `max_language_gap_steps` ships at the full width of the CEFR scale, so a language
+    demand resolves to `unknown` — which both `uncovered_hard` and `unmet_disqualifiers`
+    exclude — and the posting reaches review with the cover letter stating "A2, currently
+    learning B1". A stated German requirement is often softer than it reads, and a silent
+    skip removed the choice.
+
+    The guard that still matters is below: the keyword set must not mark it *met*.
     """
     s = scored(req("Fluent German (C1)", type="disqualifier", keywords=["german", "c1", "fluent german"], similarity=BELOW))
-    assert hard_gap_gate(s) == "skip"
-    assert "German" in gate_reason(s)
+    assert not s.requirements[0].covered, "a C1 demand must never read as satisfied at A2"
+    assert s.requirements[0].unknown, "it is a question for review"
+    assert hard_gap_gate(s) == "proceed"
 
 
 def test_met_disqualifier_does_not_skip() -> None:
@@ -157,7 +163,11 @@ def test_disqualifier_skips_even_when_everything_else_is_covered() -> None:
     s = scored(
         req("Python", keywords=["python"], similarity=ABOVE),
         req("SQL", keywords=["sql"], similarity=ABOVE),
-        req("Fluent German (C1)", type="disqualifier", keywords=["german"], similarity=BELOW),
+        # An unreachable on-site clause, not a language demand: language no longer skips,
+        # so the categorical property needs a disqualifier that still does.
+        req("Collaboration predominantly on-site in Mannheim", type="disqualifier",
+            keywords=["mannheim", "on-site"], similarity=BELOW),
+        location="Mannheim, Baden-Württemberg, Germany",
     )
     assert s.scores.hard_coverage == 1.0
     assert hard_gap_gate(s) == "skip", "a disqualifier is categorical, not outweighed by coverage"
@@ -277,8 +287,8 @@ def test_compound_language_requirement_is_not_covered_by_the_claimable_half() ->
             similarity=BELOW,
         )
     )
-    assert not s.requirements[0].covered
-    assert hard_gap_gate(s) == "skip"
+    assert not s.requirements[0].covered, "the english half must not satisfy the german half"
+    assert s.requirements[0].unknown, "it asks at review; language no longer skips"
 
 
 def test_english_only_requirement_still_covered() -> None:
@@ -337,13 +347,19 @@ def test_unrecorded_personal_fact_asks_instead_of_skipping() -> None:
 
 
 def test_unknown_never_rescues_a_real_disqualifier() -> None:
-    """German is recorded — A1/A2. That is a fact, not a blank, and it still skips."""
+    """One `unknown` disqualifier alongside a real one must not turn the run into a proceed.
+
+    Uses an unreachable on-site clause as the real disqualifier: a language demand is
+    `unknown` by policy now, so it can no longer play that role here.
+    """
     s = scored(
-        req("Fluent German (C1)", type="disqualifier", keywords=["german"], similarity=BELOW),
+        req("Collaboration predominantly on-site in Mannheim", type="disqualifier",
+            keywords=["mannheim", "on-site"], similarity=BELOW),
         req("At least in the 4th semester", type="disqualifier", keywords=["semester"], similarity=BELOW),
+        location="Mannheim, Baden-Württemberg, Germany",
     )
     assert hard_gap_gate(s) == "skip"
-    assert "German" in gate_reason(s)
+    assert "Mannheim" in gate_reason(s)
 
 
 def test_unknown_applies_only_to_disqualifiers() -> None:

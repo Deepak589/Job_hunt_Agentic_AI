@@ -92,11 +92,18 @@ class Settings(BaseSettings):
     # 20, not 5: main_cv_v2 (cv_data.json) already fits all content on one page at full
     # length — profile has 17 project bullets + 4 experience bullets total (2026-10-05)
     # — so the cap only needs to stop a runaway model, not trim real profile content.
-    # How far above the profile's own level a JD's language demand may sit and still
-    # reach human review instead of being skipped. 1 = one CEFR step, so an A2 holder
-    # studying B1 still sees a "gute Deutschkenntnisse" (B1) posting and can state the
-    # honest position in the letter; a B2 or C1 demand is still a real gap and skips.
-    max_language_gap_steps: int = 1
+    # How far above the profile's own level a JD's language demand may sit and still reach
+    # human review instead of being skipped. The CEFR scale spans 5 steps (A1..C2), so 5
+    # means a language demand NEVER skips a job: it always comes back `unknown`, which both
+    # `uncovered_hard` and `unmet_disqualifiers` exclude, so the posting reaches review and
+    # the cover letter states the honest level instead.
+    #
+    # Deliberate policy, not a loose default. A stated German requirement is frequently
+    # softer than it reads on Berlin postings, and a silent skip removes the choice; the
+    # candidate would rather see the posting and decide. Lower it (env
+    # JOBPILOT_MAX_LANGUAGE_GAP_STEPS=1) to make a demand more than one step above the
+    # profile's level a skip again.
+    max_language_gap_steps: int = 5
 
     max_bullets_per_section: int = 20
     max_bullet_chars: int = 220

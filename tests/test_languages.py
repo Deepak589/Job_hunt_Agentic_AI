@@ -100,6 +100,29 @@ def test_language_verdict(text: str, expected: str | None) -> None:
     assert language_verdict(text, RAW, max_gap_steps=1) == expected
 
 
+def test_shipped_default_never_skips_on_language() -> None:
+    """Policy: a German demand must never be a skip, at any level the posting asks for.
+
+    Both `uncovered_hard` and `unmet_disqualifiers` exclude `unknown`, so an `unknown`
+    language requirement reaches human review and the cover letter states the honest
+    level. `unmet` is the only verdict that would skip, and the shipped ceiling makes it
+    unreachable for a language.
+    """
+    from agentic_ai.config import settings
+
+    for text in (
+        "Grundkenntnisse Deutsch",
+        "Gute Deutschkenntnisse",
+        "Sehr gute Deutschkenntnisse",
+        "Verhandlungssicheres Deutsch",
+        "Muttersprachliches Deutsch erforderlich",
+        "Fluency in English and German is required",
+        "German required",
+    ):
+        verdict = language_verdict(text, RAW, settings.max_language_gap_steps)
+        assert verdict in {"met", "unknown"}, f"{text!r} would skip on language ({verdict})"
+
+
 def test_gap_ceiling_is_configurable() -> None:
     """With no tolerance, the same B1 demand becomes a skip."""
     text = "Gute Deutschkenntnisse"
