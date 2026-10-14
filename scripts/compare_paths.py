@@ -21,7 +21,7 @@ from agentic_ai.profile import Profile
 from agentic_ai.validators.facts import validate_facts
 
 
-def _dump_draft(jd_name: str, path: str, draft, errors: list[str]) -> str:
+def _dump_draft(jd_name: str, path: str, draft, errors: list[str], requirements=None) -> str:
     """Persist the draft a row describes. Without this a `fact_error_count` is unreadable:
     'claims fluency in german' could be a fabricated claim or the honest "my German is A2"
     that prompts/agent_cv.md explicitly asks for, and the count alone cannot tell them
@@ -35,7 +35,10 @@ def _dump_draft(jd_name: str, path: str, draft, errors: list[str]) -> str:
         "cover_letter": draft.cover_letter,
         "highlighted_projects": draft.highlighted_projects,
         "fact_errors": errors,
-    }, indent=2))
+        # Per-requirement, not just the count: the two paths bucket hard vs soft very
+        # differently on the same JD, and only the texts show which one is right.
+        "requirements": [r.model_dump() for r in (requirements or [])],
+    }, indent=2, default=str))
     return str(out)
 
 
@@ -56,7 +59,7 @@ async def _graph_row(jd_text: str, location: str, jd_name: str) -> dict:
     state = await compiled.ainvoke(JobState(job=job), {"configurable": {"thread_id": f"cmp:{job.id}"}})
     state = JobState(**state) if isinstance(state, dict) else state
     bullets = sum(len(v) for v in state.draft.bullets.values()) if state.draft else 0
-    dump = _dump_draft(jd_name, "graph", state.draft, state.validation_errors) if state.draft else None
+    dump = _dump_draft(jd_name, "graph", state.draft, state.validation_errors, state.requirements) if state.draft else None
     return {
         "draft_file": dump,
         "path": "graph",
@@ -76,7 +79,7 @@ def _agent_row(jd_text: str, location: str, jd_name: str) -> dict:
     errors = validate_facts(result.draft, Profile.load(), jd_keywords=hard_keywords)
     return {
         "path": "agent",
-        "draft_file": _dump_draft(jd_name, "agent", result.draft, errors),
+        "draft_file": _dump_draft(jd_name, "agent", result.draft, errors, result.requirements),
         "requirement_counts": _counts(result.requirements),
         "hard_coverage": round(result.scores.hard_coverage, 4),
         "bullets": sum(len(v) for v in result.draft.bullets.values()),

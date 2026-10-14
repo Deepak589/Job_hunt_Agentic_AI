@@ -92,7 +92,8 @@ B1."
 - The projects and experience that match this JD, with their real outcomes.
 - Why Germany and this company.
 - Availability: working student now, full-time after graduation.
-- English unless the JD explicitly requires German.
+- Write in English, unless the posting itself is written in German — then write the whole
+  letter in German, including the language line below. Match the posting, not the country.
 - Professional, confident, concise. No throat-clearing openings, no inflated adjectives, no
   three-item flourishes. Write like a competent engineer, not a brochure.
 - If a hard requirement is missing, name the gap directly and say why the candidate is still
