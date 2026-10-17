@@ -126,9 +126,36 @@ def test_resume_review_edit_pauses_again_with_the_edited_draft(monkeypatch, tmp_
 # ------------------------------------------------------------------- crash recovery
 
 
+def _never_called(name: str):
+    """A node stub that fails loudly instead of reaching the network."""
+
+    def _boom(state):
+        raise AssertionError(
+            f"{name} was called by a test that does not stub it — it would have made a "
+            "real, billed Anthropic request. Pin settings.use_agent_cv for the path under "
+            "test, or stub the node."
+        )
+
+    return _boom
+
+
+
 def test_resume_continues_without_repaying_completed_nodes(monkeypatch, tmp_path) -> None:
     """A crash mid-run must not force analyze/rewrite to be re-paid for — `resume()` picks
-    up from the last checkpointed node."""
+    up from the last checkpointed node.
+
+    This one is about the TWO-CALL path specifically: the counters below are analyze and
+    rewrite, so `use_agent_cv` has to be pinned False. It was not, and `use_agent_cv`
+    defaults True, so the graph routed to `agent_cv` — which this test does not patch.
+    Every `pytest` run therefore made a real, billed Anthropic call, reached
+    `validate_facts`, crashed there on purpose and wrote the resulting run row into the
+    REAL data/jobpilot.db (the test patches `checkpoint_db_path` only). That is where the
+    job titled "T" at "C" in the production jobs table came from. `agent_cv_node` is
+    patched to a loud failure rather than left alone, so a future routing change surfaces
+    here instead of on the invoice.
+    """
+    monkeypatch.setattr(settings, "use_agent_cv", False)
+    monkeypatch.setattr(graph_mod, "agent_cv_node", _never_called("agent_cv_node"))
     monkeypatch.setattr(settings, "checkpoint_db_path", tmp_path / "checkpoints.db")
     calls = {"analyze": 0, "rewrite": 0, "validate": 0}
 
