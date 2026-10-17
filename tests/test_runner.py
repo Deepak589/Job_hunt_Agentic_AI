@@ -49,7 +49,17 @@ def _fake_score_ats(state):
     return {"ats": ats, "notes": ["stub ats"]}
 
 
+def _fake_agent_cv(state):
+    """The default topology's single node does `analyze` AND `rewrite`, so its stub is the
+    union of both — the same contract `agent_cv_node` has with everything downstream."""
+    return {**_fake_analyze(state), **_fake_rewrite(state), "graph_path": "agent_cv"}
+
+
 def _patch_llm_nodes(monkeypatch) -> None:
+    """Patch BOTH topologies' drafting nodes so these tests cost nothing whichever one
+    `settings.use_agent_cv` selects. Patching only `analyze`/`rewrite` left the default
+    (agent) path reaching the real API."""
+    monkeypatch.setattr(graph_mod, "agent_cv_node", _fake_agent_cv)
     monkeypatch.setattr(graph_mod, "analyze", _fake_analyze)
     monkeypatch.setattr(graph_mod, "rewrite", _fake_rewrite)
     monkeypatch.setattr(graph_mod, "validate_facts_node", _fake_validate_facts)

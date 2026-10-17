@@ -33,9 +33,14 @@ use a number that isn't that bullet's own `metric`. If the bullet's `status` is
    set by `section_order`.
 3. Write a profile line of 2-3 sentences that leads with what THIS JD rewards.
 4. JD wording: if the profile backs a JD term (its skills, stack, a bullet's text, the
-   summary), use the JD's spelling — that is what an ATS scans for. If it doesn't, leave the
-   term out and say what was actually built in plain words: "multi-agent pipeline", not
-   "agentic systems"; no "microservices" for something that isn't.
+   summary), use the JD's spelling — that is what an ATS scans for. That includes the
+   umbrella a posting uses for work the profile really did: "LLMs", "Generative AI" and
+   "Agentic AI" are backed by LangChain, LangGraph, RAG, Ollama and the multi-agent
+   pipeline, and the validator resolves them through exactly those terms
+   (`validators/aliases.py`), so the JD's word for them is not a fabrication. If the
+   profile does NOT back a term, leave it out and say what was actually built in plain
+   words: no "microservices" for something that isn't, and no "Kubernetes" on a bullet
+   whose work never touched it.
 5. Cover letter: name the company and role; the 2-3 most relevant projects or roles; why
    this company and why Germany; availability (working student now, full-time after the
    MSc). If `diagnosis.hard_gaps` is non-empty, name the gap in one sentence and say why the

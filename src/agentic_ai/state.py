@@ -187,6 +187,15 @@ class JobState(BaseModel):
     scores: Scores = Field(default_factory=Scores)
     skip_reason: str | None = None  # set by hard_gap_gate → log_skip
     human_decision: Literal["approve", "edit", "reject"] | None = None  # set by human_review node
+    # Which node produced the first draft: "agent_cv" (one call does both) or "analyze"
+    # (analyze, then rewrite). Not a preference — `graph._resume` and
+    # `_list_pending_review_ids` must rebuild the topology that WROTE a checkpoint,
+    # because `aget_state` silently OMITS a pending task whose node the probe graph does
+    # not register (the same trap graph.py's human_review comment describes). Probing an
+    # agent_cv checkpoint with an analyze graph would therefore report a paused job as
+    # finished and return its half-built state. None means a checkpoint written before
+    # this field existed, which is always the analyze path.
+    graph_path: Literal["agent_cv", "analyze"] | None = None
     # LangGraph needs an explicit reducer for any field multiple nodes append to,
     # otherwise concurrent writes silently overwrite (plan.md §2).
     notes: Annotated[list[str], operator.add] = []

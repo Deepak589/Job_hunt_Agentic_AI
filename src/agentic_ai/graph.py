@@ -1,9 +1,13 @@
 """tailor_graph — per-job state machine, slimmed to one reasoning call.
 
-    load_job -> analyze -> hard_gap_gate --skip--> log_skip -> END
+    load_job -> agent_cv -> hard_gap_gate --skip--> log_skip -> END
                                   \\--proceed
                                        v
-                                    rewrite -> validate_facts
+                                 validate_facts
+                                       |
+                             errors, attempts left
+                                       v
+                                    rewrite ----> validate_facts
                                        ^            |
                                        |   errors, attempts left
                                        +------------+
@@ -21,11 +25,31 @@
                                       END    human_review   render_documents -> score_ats -> END
 
 What was removed and why (see Examples/CLAUDE.md, the manual flow this mirrors): the separate
-extract / evidence-retrieval / coverage / judge / diagnose nodes are one `analyze` call that
+extract / evidence-retrieval / coverage / judge / diagnose nodes are one reasoning call that
 reads JD and profile together; the LLM `review`, `recruiter_sim` and `hiring_manager` nodes
 are gone because the human review step is the reviewer. What stays deterministic and
 non-negotiable: the hard-gap gate, `validate_facts` (no invented claims), rendering and
 `score_ats`.
+
+Who writes the first draft is `settings.use_agent_cv` (default True):
+
+  * True  — `agent_cv` (nodes/agent_cv.py): one call returns the requirement verdicts AND
+            the draft. The gate therefore runs after a draft exists, so a skipped job pays
+            for one it never uses; config.py has the cost note.
+  * False — `analyze` then `rewrite`, two calls, the gate between them.
+
+The flag moves one node. It cannot move the guarantees: both topologies run the same
+categorical hard-gap gate, the same BLOCKING `validate_facts` with the same retry budget,
+the same `interrupt()` checkpoint, and the same render/score tail, and both are reached
+through the same `run`/`run_many`/`run_for_review` entry points — so `record_run`, content-
+hash dedupe, the cost ledger, `preferences.yaml` and MCP review visibility apply to either.
+That is the whole reason the agent call lives in here instead of beside the graph: as a
+second entry point (`jobpilot agent-draft`) it reached none of them, and its `validate_facts`
+ran in report mode, which looks like a gate and is not.
+
+A fact error always retries through `rewrite`, on both topologies — never back through
+`agent_cv`, which would re-pay for extraction and could hand back a different requirement
+list after `hard_gap_gate` had already ruled on the first one.
 
 Durability: `run()`/`run_many()`/`run_for_review()`/`resume_review()` each open ONE
 `AsyncSqliteSaver` per call (WAL mode), `thread_id = job.id`, `durability="sync"`, so a crashed
@@ -39,7 +63,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Literal
+from typing import Any, Literal
 
 import aiosqlite
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
@@ -49,6 +73,7 @@ from langgraph.types import Command, interrupt
 
 from .config import settings
 from .coverage import hard_gap_gate, log_skip
+from .nodes.agent_cv import agent_cv_node
 from .nodes.analyze import analyze
 from .nodes.rewrite import rewrite
 from .nodes.validate_facts import fact_gate, log_fact_failure, validate_facts_node
@@ -73,8 +98,47 @@ def _tracing_callbacks() -> list:
 
 
 def load_job(state: JobState) -> dict:
+    """First node of every run. Also clears the terminal fields a PREVIOUS run on this
+    thread may have left behind.
+
+    `thread_id` is the job id, so re-running a job resumes the same checkpoint, and a
+    plain-valued channel with no reducer simply survives. `skip_reason` is the one that
+    matters: the railway posting (2026-10-17) was skipped by the gate, then re-run after
+    the typing fix and passed — reaching `human_review` with `validation_errors: []` while
+    still carrying "6 uncovered hard requirements" from the run before. `persist_run` wrote
+    that stale reason, so a successful run was recorded as a skip, with no verdict and no
+    ats, and `already_processed` would never see it as finished.
+
+    Cleared here rather than in the entry points because this node runs exactly when a new
+    run begins: a crash-resume replays from the last unfinished node, and `load_job` has
+    already completed by then, so a resumed run keeps its counters.
+    """
     j = state.job
-    return {"notes": [f"loaded job {j.id} — {j.title or '(untitled)'} @ {j.company or '(unknown)'}"]}
+    return {
+        "skip_reason": None,
+        "validation_errors": [],
+        "attempt_count": 0,
+        "notes": [f"loaded job {j.id} — {j.title or '(untitled)'} @ {j.company or '(unknown)'}"],
+    }
+
+
+# `load_job`, plus the topology stamped onto the state.
+#
+# Stamped HERE and not by the drafting node, even though that node knows its own name: a
+# node that crashes records nothing, and a crash inside the drafting node is precisely the
+# case `_resume` needs the topology for (see `_snapshot_for`). `load_job` always completes,
+# so the stamp is on the checkpoint before anything can fail. The drafting nodes write the
+# same value again, which keeps them self-describing when unit-tested on their own.
+#
+# Two plain functions rather than one factory: `add_node` is overloaded on the node
+# callable, and a `Callable`-typed value does not match any of its overloads under
+# `mypy --strict`, while an ordinary `(JobState) -> dict` function does.
+def load_job_agent_path(state: JobState) -> dict[str, Any]:
+    return {**load_job(state), "graph_path": "agent_cv"}
+
+
+def load_job_analyze_path(state: JobState) -> dict[str, Any]:
+    return {**load_job(state), "graph_path": "analyze"}
 
 
 def human_review(state: JobState) -> dict:
@@ -86,12 +150,16 @@ def human_review(state: JobState) -> dict:
     decision = interrupt({"draft": state.draft, "diagnosis": state.diagnosis})
     action = decision.get("action", "approve")
     if action == "edit":
+        from .nodes.validate_facts import hard_keywords_for_facts
         from .profile import Profile
         from .validators.facts import validate_facts
 
         draft = Draft.model_validate(decision["draft"])
-        jd_keywords = [kw for r in state.requirements if r.type == "hard" for kw in r.keywords]
-        errors = validate_facts(draft, Profile.load(), jd_keywords=jd_keywords)
+        # Same keyword derivation as the `validate_facts` node — an edited draft must be
+        # held to exactly the standard the automatic check applies, not a second copy of it.
+        errors = validate_facts(
+            draft, Profile.load(), jd_keywords=hard_keywords_for_facts(state.requirements)
+        )
         return {
             "draft": draft,
             "human_decision": "edit",
@@ -114,10 +182,17 @@ def human_review_gate(state: JobState) -> Literal["approve", "edit", "reject"]:
     return state.human_decision or "approve"
 
 
-def build_graph(skip_render: bool = False, checkpointer=None, review_pause: bool = False):
+def build_graph(
+    skip_render: bool = False,
+    checkpointer=None,
+    review_pause: bool = False,
+    use_agent_cv: bool | None = None,
+):
+    """`use_agent_cv=None` takes `settings.use_agent_cv`. Pass it explicitly only to
+    rebuild the topology that wrote an existing checkpoint (see `_snapshot_for`)."""
+    agent_path = settings.use_agent_cv if use_agent_cv is None else use_agent_cv
     g = StateGraph(JobState)
-    g.add_node("load_job", load_job)
-    g.add_node("analyze", analyze)
+    g.add_node("load_job", load_job_agent_path if agent_path else load_job_analyze_path)
     g.add_node("log_skip", log_skip)
     g.add_node("rewrite", rewrite)
     g.add_node("validate_facts", validate_facts_node)
@@ -126,8 +201,19 @@ def build_graph(skip_render: bool = False, checkpointer=None, review_pause: bool
     g.add_node("score_ats", score_ats)
 
     g.set_entry_point("load_job")
-    g.add_edge("load_job", "analyze")
-    g.add_conditional_edges("analyze", hard_gap_gate, {"skip": "log_skip", "proceed": "rewrite"})
+    # The only structural difference between the two topologies. `agent_cv` arrives at the
+    # gate with a draft already in state, so `proceed` goes straight to validation;
+    # `analyze` arrives with requirements only, so `proceed` has to draft first.
+    if agent_path:
+        g.add_node("agent_cv", agent_cv_node)
+        g.add_edge("load_job", "agent_cv")
+        g.add_conditional_edges(
+            "agent_cv", hard_gap_gate, {"skip": "log_skip", "proceed": "validate_facts"}
+        )
+    else:
+        g.add_node("analyze", analyze)
+        g.add_edge("load_job", "analyze")
+        g.add_conditional_edges("analyze", hard_gap_gate, {"skip": "log_skip", "proceed": "rewrite"})
     g.add_edge("log_skip", END)
     g.add_edge("rewrite", "validate_facts")
 
@@ -325,8 +411,18 @@ def run_for_review(jd_text: str, title: str = "", company: str = "", **job_field
 
 async def _resume_review(job_id_: str, action: Literal["approve", "edit", "reject"], draft: Draft | None) -> JobState:
     async with _open_checkpointer() as saver:
-        graph = build_graph(skip_render=False, checkpointer=saver, review_pause=True)
         config = {"configurable": {"thread_id": job_id_}, "callbacks": _tracing_callbacks()}
+        # Resume on the topology that paused this job. An "edit" loops back through
+        # `human_review` and an "approve" runs render/score — nodes both topologies share —
+        # but the graph being resumed still has to be the one the checkpoint was written
+        # against, not whatever `settings.use_agent_cv` happens to say today.
+        snapshot = await _snapshot_for(saver, {"configurable": {"thread_id": job_id_}})
+        graph = build_graph(
+            skip_render=False,
+            checkpointer=saver,
+            review_pause=True,
+            use_agent_cv=_wrote_with_agent_cv(snapshot.values or {}),
+        )
         resume_payload: dict = {"action": action}
         if action == "edit":
             assert draft is not None, "action='edit' requires draft"
@@ -346,9 +442,7 @@ def resume_review(
 
 async def _get_paused_state(job_id_: str) -> JobState:
     async with _open_checkpointer() as saver:
-        graph = build_graph(skip_render=False, checkpointer=saver, review_pause=True)
-        config = {"configurable": {"thread_id": job_id_}}
-        snapshot = await graph.aget_state(config)
+        snapshot = await _snapshot_for(saver, {"configurable": {"thread_id": job_id_}})
     if not snapshot.values:
         raise KeyError(f"no paused job found for id {job_id_!r}")
     return JobState.model_validate(snapshot.values)
@@ -386,22 +480,54 @@ def list_pending_review_ids() -> list[str]:
     return asyncio.run(_list_pending_review_ids())
 
 
+def _wrote_with_agent_cv(values: dict[str, Any]) -> bool:
+    """Which topology wrote this checkpoint. `graph_path` is absent on every checkpoint
+    written before that field existed, and those are all `analyze` runs."""
+    return values.get("graph_path") == "agent_cv"
+
+
+async def _snapshot_for(saver: AsyncSqliteSaver, config: dict[str, Any]) -> Any:
+    """A thread's state read under the topology that WROTE it.
+
+    Two separate ways `aget_state` under-reports, both the same root cause — it can only
+    name a pending task whose node the probe graph registers:
+      * `human_review` is absent from the plain (non-review) graph, so probe with
+        review_pause=True, which is a superset of the plain topology;
+      * `agent_cv` is absent from the analyze graph and `analyze` from the agent graph, so
+        a thread that crashed mid-draft reads back with an EMPTY `next` under the other
+        one — which `_resume` would take for "already finished" and return half-built
+        state as a result. `graph_path` on the state says which to build.
+    Reading twice is free: both calls are checkpoint reads, no node runs.
+    """
+    first = await build_graph(skip_render=False, checkpointer=saver, review_pause=True).aget_state(config)
+    if not first.values:
+        return first
+    wrote_agent = _wrote_with_agent_cv(first.values)
+    if wrote_agent == settings.use_agent_cv:
+        return first
+    graph = build_graph(
+        skip_render=False, checkpointer=saver, review_pause=True, use_agent_cv=wrote_agent
+    )
+    return await graph.aget_state(config)
+
+
 async def _resume(job_id_: str) -> JobState:
     async with _open_checkpointer() as saver:
         config = {"configurable": {"thread_id": job_id_}, "callbacks": _tracing_callbacks()}
-        # `human_review` is a node the plain (non-review) graph never registers, so
-        # `next` under that topology silently omits a pending human_review task rather
-        # than naming it — probe with the review_pause=True (superset) topology first,
-        # which registers every node either graph could have paused at.
-        probe = build_graph(skip_render=False, checkpointer=saver, review_pause=True)
-        snapshot = await probe.aget_state(config)
+        snapshot = await _snapshot_for(saver, config)
         if not snapshot.values:
             raise KeyError(f"no in-progress job found for id {job_id_!r}")
         if "human_review" in snapshot.next:
             raise ValueError(f"job {job_id_!r} is paused for review — use 'jobpilot review' instead")
         if not snapshot.next:
             return JobState.model_validate(snapshot.values)  # already finished
-        graph = build_graph(skip_render=False, checkpointer=saver)
+        # Finish it on the topology that started it, not on today's default: the remaining
+        # nodes have to be the ones this checkpoint was partway through.
+        graph = build_graph(
+            skip_render=False,
+            checkpointer=saver,
+            use_agent_cv=_wrote_with_agent_cv(snapshot.values),
+        )
         result = await graph.ainvoke(None, config=config, durability="sync")
     return JobState.model_validate(result)
 

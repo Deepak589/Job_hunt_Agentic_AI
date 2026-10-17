@@ -17,9 +17,23 @@ Do not jump to rewriting before diagnosing. The gap report drives everything dow
    Docker: one each) even when listed together. Degree, each spoken language, location and
    weekly hours are separate items. Keep a stated quantity with its item ("3+ years Python").
    Buckets by wording: **hard** (stated flatly — required, must, you have), **soft** (hedged
-   — preferably, a plus, von Vorteil, wünschenswert; "Flask, Django or FastAPI" means any one
-   will do, so each is soft), **disqualifier** (a flat gate — language level, work
-   authorization, enrollment, on-site city).
+   — preferably, a plus, von Vorteil, wünschenswert), **disqualifier** (a flat gate —
+   language level, work authorization, enrollment, on-site city).
+   **A list of alternatives is never a list of hard requirements.** Whenever the JD offers a
+   choice, ANY ONE of the named options satisfies it. Every one of these is a choice:
+     - "A or B"                      "Tensorflow or Pytorch"
+     - "A/B"                         "Llama-Index/Langchain", "SQL/MongoDB"
+     - "such as A, B"                "vector databases such as ChromaDB, FAISS"
+     - a list ending in "etc"        "PyMuPDF, Docling, BeautifulSoup etc"
+     - "e.g. A, B", "like A, B", "including A, B"
+   For those, emit ONE item for the capability the list exemplifies, and mark it `met` if the
+   profile holds any single named option — then emit each option the profile does NOT hold as
+   `soft`, never as a hard item of its own. "Llama-Index/Langchain" against a profile with
+   LangChain is MET, not a Llama-Index gap. "Vector databases such as ChromaDB, FAISS etc"
+   against a profile with Chroma is MET. "SQL/MongoDB" against a profile with PostgreSQL is
+   MET. Only a tool the JD demands on its own, with no alternative offered, is a hard item.
+   Getting this wrong is not cosmetic: each spurious hard item with no evidence counts
+   against `max_blocking_hard_gaps`, and four of them skip a job the candidate qualifies for.
    Verdict each: **met** (profile facts satisfy it, even in different words — a named tool
    shown in a project counts when the JD asks for no years or production depth), **unmet** (a
    confirmed gap you can state in one sentence; for a disqualifier, a profile fact that fails

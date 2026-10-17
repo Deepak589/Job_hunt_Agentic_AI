@@ -62,6 +62,23 @@ class Settings(BaseSettings):
     # otherwise.
     sem_threshold: float = 0.5558
 
+    # --- pipeline topology ---
+    # True: ONE `agent_cv` call returns the requirement verdicts AND the first draft
+    # (prompts/agent_cv.md, nodes/agent_cv.py). False: the two-call `analyze` -> `rewrite`
+    # path. Either way the draft meets the same blocking `validate_facts`, the same
+    # `interrupt()` review checkpoint and the same render/score tail — this flag decides
+    # who writes the first draft, never what is allowed to reach a PDF.
+    #
+    # Two consequences worth knowing before flipping it:
+    #   * The gate runs AFTER a draft exists, because one call returns both. A job the
+    #     gate skips therefore costs the full drafting call (~$0.18) instead of `analyze`
+    #     alone (~$0.05). That is the price of a single reasoning pass; set this False for
+    #     a skip-heavy batch where most JDs never reach a draft.
+    #   * Retries still go to `rewrite`, not back through `agent_cv` — re-running it would
+    #     re-pay for extraction and could change the requirement list after `hard_gap_gate`
+    #     had already ruled on it.
+    use_agent_cv: bool = True
+
     # --- gate ---
     # Raised from 1 to 3: `judge_requirements` now gives every uncovered hard gap an LLM
     # second opinion first, so what reaches this count is a higher-confidence real gap,

@@ -68,12 +68,31 @@ def _profile_brief(profile: Profile) -> str:
     )
 
 
+# The buckets whose verdict can skip a job: an unmet DISQUALIFIER skips immediately, an
+# uncovered HARD joins the `max_blocking_hard_gaps` budget. SOFT only moves a coverage
+# number, so re-deciding it would add review questions without preventing anything.
+_GATED_TYPES = frozenset({"disqualifier", "hard"})
+
+
 def _apply_rails(reqs: list[Requirement], job_location: str) -> list[Requirement]:
-    """Deterministic overrides on disqualifiers; the model's verdict never wins over these."""
+    """Deterministic overrides on every gate-affecting requirement; the model's verdict
+    never wins over these.
+
+    Applied by what a requirement DOES, not by the bucket the model filed it under. This
+    used to run only on `type == "disqualifier"`, which made both rails depend on the
+    model labelling correctly — and it does not always. `agent_cv`, which types and
+    drafts in one call, filed good_jd's "Pullach, nearby Munich" on-site clause and its
+    English clause as `hard`. Under the old scoping that silently skipped BOTH rails:
+    `_location_reachable` never ran, so the commute question was never asked, and a
+    German demand labelled `hard` would have bypassed the language rail entirely and
+    landed in the hard-gap budget — the one outcome "a language demand never skips a
+    job" (CLAUDE.md, config.max_language_gap_steps) exists to rule out. A rail that only
+    fires when the model picks the right noun is not a rail.
+    """
     places = location_terms()
     out = []
     for r in reqs:
-        if r.type == "disqualifier":
+        if r.type in _GATED_TYPES:
             lang = language_requirement_verdict(r)
             if lang == "unmet":  # demand sits further above the profile than the gap ceiling
                 r = r.model_copy(update={"covered": False, "unknown": False, "covered_by": None})
@@ -140,6 +159,7 @@ def analyze(state: JobState, verbose: bool = False) -> dict:
         "requirements": reqs,
         "diagnosis": diagnosis,
         "scores": scores,
+        "graph_path": "analyze",  # see JobState.graph_path — resume must know which topology wrote this
         "notes": [
             f"analyze: {len(reqs)} requirements {counts}, {len(diagnosis.hard_gaps)} hard gaps, "
             f"{len(state.job.jd_text)} chars JD"

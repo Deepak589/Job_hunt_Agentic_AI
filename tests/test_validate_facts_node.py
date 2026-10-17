@@ -63,3 +63,32 @@ def test_disqualifier_keyword_is_never_checked_here() -> None:
     state = _state_with_requirement(req, "Deployed the fix using Kubernetes.", real.id)
     out = validate_facts_node(state)
     assert out["validation_errors"] == []
+
+
+def test_rail_owned_keywords_never_reach_the_fact_checker() -> None:
+    """A location or language keyword is not fabricable tech, and the fact-checker must
+    never be handed one.
+
+    The old code excluded them by BUCKET — "a DISQUALIFIER is already proven true by
+    `hard_gap_gate`". `agent_cv` types and drafts in one call and files such clauses as
+    `hard`, so that exclusion stopped firing: on good_jd the cover letter was flagged for
+    `claims unevidenced tech 'pullach'` — for naming the town the office is in.
+    """
+    from agentic_ai.nodes.validate_facts import hard_keywords_for_facts
+    from agentic_ai.state import Requirement
+
+    reqs = [
+        Requirement(text="Hands-on experience with Python", type="hard", keywords=["python", "git"]),
+        Requirement(text="Location: Pullach, nearby Munich, Germany", type="hard",
+                    keywords=["pullach", "munich", "on-site", "location"]),
+        Requirement(text="Strong communication skills in English", type="hard",
+                    keywords=["english", "communication skills"]),
+        Requirement(text="Kubernetes", type="soft", keywords=["kubernetes"]),
+    ]
+
+    kws = hard_keywords_for_facts(reqs)
+
+    assert "python" in kws and "git" in kws
+    assert "pullach" not in kws and "munich" not in kws, "the on-site rail owns these"
+    assert "english" not in kws, "the language rail owns this"
+    assert "kubernetes" not in kws, "soft keywords were never policed here"

@@ -36,7 +36,17 @@ def _fake_validate_facts(state):
     return {"validation_errors": [], "notes": ["stub validate_facts"]}
 
 
+def _fake_agent_cv(state):
+    """The default topology's single node does `analyze` AND `rewrite`, so its stub is the
+    union of both — the same contract `agent_cv_node` has with everything downstream."""
+    return {**_fake_analyze(state), **_fake_rewrite(state), "graph_path": "agent_cv"}
+
+
 def _patch_llm_nodes(monkeypatch) -> None:
+    """Patch BOTH topologies' drafting nodes so these tests cost nothing whichever one
+    `settings.use_agent_cv` selects. Patching only `analyze`/`rewrite` left the default
+    (agent) path reaching the real API."""
+    monkeypatch.setattr(graph_mod, "agent_cv_node", _fake_agent_cv)
     monkeypatch.setattr(graph_mod, "analyze", _fake_analyze)
     monkeypatch.setattr(graph_mod, "rewrite", _fake_rewrite)
     monkeypatch.setattr(graph_mod, "validate_facts_node", _fake_validate_facts)
@@ -109,8 +119,9 @@ def test_run_many_skips_a_job_already_processed(monkeypatch, tmp_path) -> None:
     persist_run(seen, db_path=graph_mod.settings.jobs_db_path)
 
     def _fail(*a, **k):
-        raise AssertionError("already-processed job must not reach analyze")
+        raise AssertionError("already-processed job must not reach the drafting node")
 
+    monkeypatch.setattr(graph_mod, "agent_cv_node", _fail)
     monkeypatch.setattr(graph_mod, "analyze", _fail)
 
     results = asyncio.run(graph_mod.run_many([jd_text], _skip_render=True))
@@ -158,6 +169,10 @@ def test_run_many_persists_cost_from_a_crashed_job(monkeypatch, tmp_path) -> Non
     def _fake_rewrite_crashes(state):
         raise RuntimeError("rewrite failed: Invalid json output (stop_reason=max_tokens)")
 
+    # Pinned to the analyze topology on purpose: this test is about spend BANKED by a
+    # completed node surviving a later node's crash, and only a two-call path has an
+    # earlier node to bank it. The agent path's equivalent is the test below.
+    monkeypatch.setattr(graph_mod.settings, "use_agent_cv", False)
     monkeypatch.setattr(graph_mod, "analyze", _fake_analyze_with_cost)
     monkeypatch.setattr(graph_mod, "rewrite", _fake_rewrite_crashes)
     _isolate_db(monkeypatch, tmp_path)
@@ -176,3 +191,35 @@ def test_run_many_persists_cost_from_a_crashed_job(monkeypatch, tmp_path) -> Non
     assert tokens_in == 100
     assert tokens_out == 50
     assert cost_usd == 0.0012
+
+
+def test_agent_path_crash_still_leaves_a_null_verdict_row(monkeypatch, tmp_path) -> None:
+    """The agent path's half of the crash guarantee, and the one place it is weaker.
+
+    `_invoke_tracked` persists whatever the checkpointer captured before a crash. On the
+    two-call path that includes `analyze`'s recorded spend. On the agent path the first
+    node that spends is also the first node that can crash, so there is nothing banked yet
+    and the cost of the in-flight call is NOT recorded — Anthropic still billed it. What
+    must survive either way is the row itself with a NULL verdict, which is what
+    `already_processed` reads to decide a job is re-runnable rather than done.
+    """
+    import sqlite3
+
+    def _crash(state):
+        raise RuntimeError("agent_cv failed: Invalid json output (stop_reason=max_tokens)")
+
+    monkeypatch.setattr(graph_mod, "agent_cv_node", _crash)
+    _isolate_db(monkeypatch, tmp_path)
+
+    try:
+        asyncio.run(graph_mod.run_many(["a jd that crashes on the agent path"], _skip_render=True))
+    except RuntimeError:
+        pass
+
+    with sqlite3.connect(graph_mod.settings.jobs_db_path) as conn:
+        row = conn.execute("SELECT verdict, cost_usd FROM runs").fetchone()
+
+    assert row is not None, "crashed agent-path run left no row at all"
+    verdict, cost_usd = row
+    assert verdict is None, "a crashed run is re-runnable, not done"
+    assert cost_usd == 0.0, "documents the gap: the in-flight call's spend is not banked"

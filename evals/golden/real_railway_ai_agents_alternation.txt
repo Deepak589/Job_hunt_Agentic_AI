@@ -1,0 +1,33 @@
+About the job
+
+About the Project
+Join us to develop advanced AI Agents that accelerate and improve the design and development of railway infrastructure. You'll work on intelligent document processing, retrieval-augmented generation (RAG), and domain-specific agents to automate and enhance technical workflows in railway engineering.
+
+Required Skills & Experience
+
+* Solid Python programming foundation
+* AI Agent development and orchestration using Llama-Index/Langchain
+* Vector databases such as ChromaDB, FAISS etc and SQL/MongoDB
+* Document and Data preprocessing with PyMuPDF, Docling, BeautifulSoup etc
+* Data science tools: Pandas, Numpy, Matplotlib, Tensorflow or Pytorch etc
+
+Nice to Have
+
+* HuggingFace ecosystem (transformers, sentence-transformers)
+* LLM model finetuning
+* Training reasoning models using GRPO
+* Software tools: AI-assisted coding tools (e.g., Github Copilot, Cursor), Git, Docker, Kubernetes
+* Streamlit for rapid prototyping
+* UI/UX knowledge with React, Vue, or similar frontend frameworks
+* Experience with RESTful APIs and web integration
+* Clean code practices, debugging, and version control
+* Fluency in English and B1 level German
+
+What We Offer
+
+* Flexible working hours (20h/week)
+* Hands-on experience with latest trends in GenAI and engineering applications
+* Mentorship and an open team with lots of working flexibility
+* Modern tech stack and tools
+
+We look forward for your application!

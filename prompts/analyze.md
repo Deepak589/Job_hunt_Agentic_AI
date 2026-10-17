@@ -17,10 +17,18 @@ Buckets, decided by the wording:
 - **hard**: stated flatly ("required", "must", "you have", or listed with no hedge). Named
   stack, tools, degree, years.
 - **soft**: hedged or optional ("von Vorteil", "wünschenswert", "preferably", "a plus",
-  "nice to have", "runden Dein Profil ab"), plus traits, culture and tone. "Flask, Django or
-  FastAPI" or "such as ..." means any one will do: each is soft.
+  "nice to have", "runden Dein Profil ab"), plus traits, culture and tone.
 - **disqualifier**: a gate the JD draws flatly: language level, work authorization,
   enrollment status, clearance, or where the work happens (on-site city).
+
+**A list of alternatives is never a list of hard requirements.** Any one of the named options
+satisfies it, and all of these forms are a choice: "A or B", "A/B" ("Llama-Index/Langchain",
+"SQL/MongoDB"), "such as A, B", a list ending in "etc" ("PyMuPDF, Docling, BeautifulSoup
+etc"), "e.g.", "like", "including". Emit ONE item for the capability the list exemplifies and
+mark it `met` if the profile holds any single named option; emit each option the profile does
+not hold as `soft`, never as a hard item of its own. Only a tool demanded on its own, with no
+alternative offered, is hard. Each spurious hard item with no evidence counts against the
+blocking-gap budget, and a handful of them skip a job the candidate qualifies for.
 
 `keywords` are lowercase ATS terms: the JD's spelling plus obvious variants. Never empty.
 

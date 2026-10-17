@@ -44,6 +44,32 @@ INGEST GRAPH  (cron, daily)
                                                      already applied)
 
 TAILOR GRAPH  (per job, thread_id = job.id)
+  ─── AS SHIPPED (branch slim-agent, 2026-10) ──────────────────────────────────
+  load_job
+    ↓
+  agent_cv                    # ONE LLM call (Sonnet): requirements + per-item verdict
+    ↓                         #   vs profile + matches + full draft + cover letter +
+    │                         #   self_score/recruiter/hiring-manager verdicts.
+    │                         #   settings.use_agent_cv=False → analyze, then rewrite.
+  ┌─ hard_gap_gate ──── unmet disqualifier / > max_blocking_hard_gaps ──> log_skip ──> END
+  │        │ proceed
+  │        ↓
+  │  validate_facts  ──── errors, attempts left ────> rewrite ──┐   # DETERMINISTIC, BLOCKING
+  │        │        └──── errors, attempts spent ───> log_fact_failure ──> END
+  │        │ clean                                              │
+  │        │<─────────────────────────────────────────────────────┘
+  │        ↓
+  │  INTERRUPT(human_review)           # approve / edit / reject — needs a checkpointer
+  │        ↓ approved
+  │  render_documents                  # Jinja2 HTML → headless Chrome --print-to-pdf
+  │        ↓
+  │  score_ats ──> END
+  └─
+  Deterministic rails inside agent_cv/analyze (coverage.py, applied to hard AND
+  disqualifier, never by the bucket the model chose): language level vs profile level,
+  on-site clause vs job location. Retries go to `rewrite`, never back through `agent_cv`.
+
+  ─── ORIGINAL 16-NODE DESIGN (branch main; kept for the rubrics below) ─────────
   load_job
     ↓
   extract_requirements        # LLM → Requirement[]  (hard | soft | disqualifier)
@@ -164,6 +190,7 @@ for any field multiple nodes append to, otherwise concurrent writes silently ove
 | `normalize` | raw payloads | `Job` | — | yes |
 | `dedupe` | `Job` | drop / keep | — | yes |
 | `prefilter` | `Job` | drop / keep + reason | — | yes |
+| `agent_cv` | `job.jd_text` + master profile | `requirements[]`, `diagnosis`, `scores`, `draft`, `recruiter`, `hiring_manager`, `graph_path` | Sonnet | no (rails after it are) |
 | `extract_requirements` | `job.jd_text` | `requirements[]` | Haiku | no |
 | `retrieve_evidence` | `requirements[]` | `requirement.evidence[]` | local embeddings | yes |
 | `score_coverage` | `requirements[]` | `scores.hard/soft_coverage` | — | **yes** |

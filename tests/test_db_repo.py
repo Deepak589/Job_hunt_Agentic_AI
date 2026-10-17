@@ -93,3 +93,58 @@ def test_cost_summary_since_filters_out_older_runs(tmp_path) -> None:
     assert summary["total_runs"] == 0
     assert summary["total_cost_usd"] == 0.0
     assert summary["by_day"] == []
+
+
+def test_a_skipped_run_records_no_verdict_even_when_the_model_said_apply(tmp_path) -> None:
+    """`agent_cv` carries its own `final_verdict` into state, so a job the gate SKIPPED was
+    recording `verdict='apply'` — the model's opinion wearing the pipeline's name.
+
+    Two things depended on that being NULL: `already_processed` keys off `verdict IS NOT
+    NULL`, so a skipped job read as finished and could never be re-run once the cause of the
+    skip was fixed; and `jobpilot cost` / `judge-stats` reported "apply" for a job that never
+    produced a document.
+    """
+    from agentic_ai.db.repo import already_processed, persist_run
+    from agentic_ai.state import HiringManagerVerdict, Job, JobState
+
+    db = tmp_path / "jobpilot.db"
+    job = Job(id="skipped1", source="manual", title="T", jd_text="a jd the gate refuses")
+    state = JobState(
+        job=job,
+        hiring_manager=HiringManagerVerdict(verdict="apply", why="model liked it"),
+        skip_reason="6 uncovered hard requirements (limit 3): Llama-Index; FAISS",
+    )
+
+    persist_run(state, db_path=db)
+
+    import sqlite3
+
+    with sqlite3.connect(db) as conn:
+        verdict = conn.execute("SELECT verdict FROM runs WHERE job_id = ?", (job.id,)).fetchone()[0]
+
+    assert verdict is None, "a skipped run has no pipeline verdict, whatever the model thought"
+    assert not already_processed(job.id, job.content_hash, db_path=db), "a skipped job stays re-runnable"
+
+
+def test_a_completed_run_records_the_deterministic_ats_verdict_not_the_models(tmp_path) -> None:
+    """CLAUDE.md: the deterministic AtsScore is the authoritative apply/skip number;
+    `hiring_manager` is informational. The old expression preferred the model."""
+    from agentic_ai.db.repo import persist_run
+    from agentic_ai.state import AtsScore, HiringManagerVerdict, Job, JobState
+
+    db = tmp_path / "jobpilot.db"
+    job = Job(id="done1", source="manual", title="T", jd_text="a jd that completes")
+    state = JobState(
+        job=job,
+        hiring_manager=HiringManagerVerdict(verdict="apply", why="model liked it"),
+        ats=AtsScore(total=61.0, verdict="fix_then_apply", gates={}, components={}, report=""),
+    )
+
+    persist_run(state, db_path=db)
+
+    import sqlite3
+
+    with sqlite3.connect(db) as conn:
+        verdict = conn.execute("SELECT verdict FROM runs WHERE job_id = ?", (job.id,)).fetchone()[0]
+
+    assert verdict == "fix_then_apply"

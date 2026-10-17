@@ -40,6 +40,30 @@ def init_db(db_path: Path | None = None) -> None:
         conn.commit()
 
 
+def _recorded_verdict(state: JobState) -> str | None:
+    """The PIPELINE's verdict for this run, or None if it never reached one.
+
+    Order matters, and it used to be backwards: `hiring_manager.verdict if hiring_manager
+    else ats.verdict`. CLAUDE.md is explicit that the deterministic `AtsScore` is the
+    authoritative apply/skip number and `hiring_manager` is informational, so preferring the
+    model's opinion inverted that. It was harmless only while nothing set `hiring_manager`
+    outside a completed run — then `agent_cv_node` started carrying the agent's own
+    `final_verdict` into state, and a job the gate SKIPPED began recording `verdict='apply'`.
+
+    Two things broke from that one row. `already_processed` keys off `verdict IS NOT NULL`,
+    so a skipped job read as finished and could never be re-run after the cause of the skip
+    was fixed. And the runs table, `jobpilot cost` and `judge-stats` all reported "apply" for
+    a job the pipeline refused to draft — the model's opinion wearing the pipeline's name.
+
+    So: a run that skipped or failed records no verdict, whatever the model thought.
+    """
+    if state.skip_reason:
+        return None
+    if state.ats:
+        return state.ats.verdict
+    return state.hiring_manager.verdict if state.hiring_manager else None
+
+
 def persist_run(state: JobState, db_path: Path | None = None) -> str:
     """Upsert the job row, insert one run row. Returns the new run_id."""
     path = db_path or settings.jobs_db_path
@@ -76,7 +100,7 @@ def persist_run(state: JobState, db_path: Path | None = None) -> str:
                 state.scores.hard_coverage, state.scores.soft_coverage,
                 state.scores.review_score,
                 state.recruiter.result if state.recruiter else None,
-                state.hiring_manager.verdict if state.hiring_manager else (state.ats.verdict if state.ats else None),
+                _recorded_verdict(state),
                 state.attempt_count, state.skip_reason,
                 tokens_in, tokens_out, state.total_cost_usd,
                 state.ats.total if state.ats else None,

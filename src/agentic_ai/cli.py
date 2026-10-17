@@ -901,6 +901,7 @@ def agent_draft(
 ) -> None:
     """Run one JD through the single-call agent path (prompts/agent_cv.md)."""
     from .nodes.agent_cv import agent_cv
+    from .nodes.validate_facts import hard_keywords_for_facts
     from .profile import Profile
     from .state import Job, JobState, job_id
     from .validators.facts import validate_facts
@@ -920,8 +921,13 @@ def agent_draft(
     result = agent_cv(jd_text, job_location=location, verbose=verbose)
 
     # Report mode: same validator, same hard-keyword input as the graph, no blocking.
-    hard_keywords = [kw for r in result.requirements if r.type == "hard" for kw in r.keywords]
-    fact_errors = validate_facts(result.draft, Profile.load(), jd_keywords=hard_keywords)
+    # "Same input" has to mean the graph's own derivation, not a copy of it — the copy
+    # reported `claims unevidenced tech 'pullach'` for naming the office town, which the
+    # graph never would (nodes/validate_facts.hard_keywords_for_facts drops the keywords
+    # the deterministic rails own).
+    fact_errors = validate_facts(
+        result.draft, Profile.load(), jd_keywords=hard_keywords_for_facts(result.requirements)
+    )
 
     state = JobState(
         job=Job(

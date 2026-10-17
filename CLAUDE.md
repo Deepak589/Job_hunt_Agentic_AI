@@ -40,12 +40,17 @@ commit. If it was skipped, say so in the closing summary.
 Slimmed (branch `slim-agent`) to match the manual flow in `Examples/CLAUDE.md`: one reasoning
 call, deterministic guards around it, a human as the reviewer.
 ```
-load_job → analyze (ONE LLM call: requirements + per-item verdict vs profile + matches)
+load_job → agent_cv (ONE LLM call: requirements + verdicts + full draft + 3 judgments)
   ├─ hard gap / unmet disqualifier → log_skip → END
-  └─ rewrite → validate_facts (deterministic; retry max 2)
+  └─ validate_facts (deterministic, BLOCKING; retry max 2 → rewrite, never agent_cv)
        ├─ fail → log_fact_failure → END
        └─ [human_review: interrupt()] → render_documents → score_ats
 ```
+`settings.use_agent_cv` (default True) picks who drafts: `agent_cv` (one call) or the
+two-call `analyze` → `rewrite`. It moves one node and nothing else — both topologies share
+the gate, the blocking validator, the review interrupt, the render/score tail, and the
+`run`/`run_many`/`run_for_review` entry points, so `record_run`, dedupe, the cost ledger,
+`preferences.yaml` and MCP review visibility apply to either.
 Removed: separate extract / evidence-retrieval / coverage / judge / diagnose nodes, and the LLM
 `review`, `recruiter_sim`, `hiring_manager` nodes (originals are on `main`). Kept in code after
 `analyze`: the language-below-fluency and on-site-location rails (`coverage.py`), the categorical
@@ -68,13 +73,69 @@ pytest -q && ruff check . && mypy src        # + pytest evals/ for the golden se
 Manual JD input is the primary path; ingest is the supplement.
 
 ## Do not undo — each cost something to get right
+- **`agent_cv` is a NODE, not a second entry point.** It began as `jobpilot agent-draft`,
+  drafted better than `analyze` + `rewrite` and cost less — and reached none of the
+  pipeline: no run row, no content-hash dedupe, no review checkpoint, no preferences, no
+  per-job budget reserve, invisible to `list_pending_reviews`. Worse, its `validate_facts`
+  ran in REPORT mode, which looks like a gate and is not: on `good_jd` it reported 5 fact
+  errors and still returned `apply`. Never re-plumb a drafting path around the graph to
+  pick up a better prompt; move the call inside and keep the guarantees. `agent-draft`
+  stays as the comparison harness and stays report-only — the thing being measured must
+  not change underneath it.
+- **A fact error retries through `rewrite`, never back through `agent_cv`.** Re-running the
+  one call would re-pay for requirement extraction and could return a DIFFERENT requirement
+  list after `hard_gap_gate` had already ruled on the first one — a gate decision
+  invalidated by its own retry. `rewrite` gets the diagnosis and the exact errors and fixes
+  only what they name.
+- **The rails fire on what a requirement DOES, not on the bucket the model gave it**
+  (`analyze._GATED_TYPES`). Scoping `_apply_rails` to `type == "disqualifier"` made both
+  rails depend on the model labelling correctly, and `agent_cv` — which types and drafts in
+  one call — filed good_jd's "Pullach, nearby Munich" on-site clause and its English clause
+  as `hard`. That silently skipped both: `_location_reachable` never ran, and a German
+  demand filed `hard` would have bypassed the language rail into the hard-gap budget. SOFT
+  is deliberately left alone; it only moves a coverage number.
+- **`validators/aliases.py` is a scoped resolver, not a whitelist.** An umbrella a JD uses
+  ("LLMs", "Generative AI", "Agentic AI") is absent from the profile while the work it names
+  is present — there is no `LLM` skill, there is LangChain, LangGraph, RAG, Ollama. Each row
+  resolves against THE SAME scope the term was already checked in, so a bullet built from
+  the insurance migration still cannot say "LLM", and an umbrella whose backing work leaves
+  the profile stops passing on its own. Never add a row whose right-hand side is not already
+  a profile term — `test_every_alias_target_is_a_real_profile_term` fails first if you do.
+- **A list of alternatives is never a list of hard requirements** (`prompts/analyze.md` and
+  `prompts/agent_cv.md`, same wording in both — keep them in sync). "A or B", "A/B",
+  "such as A, B", a list ending in "etc", "e.g.", "including": any ONE satisfies it, so the
+  capability is one item marked met and each unheld option is `soft`, never a hard item of
+  its own. `agent_cv.md` originally compressed this rule and dropped the "such as ..." case,
+  and a railway-AI posting (2026-10-17) written entirely in the dropped forms came back as
+  16 hard requirements with 6 "gaps" — Llama-Index, FAISS, MongoDB, PyMuPDF, Docling,
+  BeautifulSoup — four of which the profile satisfies through LangChain, Chroma and
+  PostgreSQL. `hard_gap_gate` then skipped a job the model itself scored `apply`. The tell:
+  "Tensorflow **or** Pytorch" was the one list written with "or", the one form the prompt
+  still covered, and the only one typed correctly. Do not answer a false skip by raising
+  `max_blocking_hard_gaps` — against 16 hard items a bigger cap does not loosen the gate, it
+  deletes it, and leaves the typing wrong in the direction that passes jobs that should skip.
+- **Naming a gap is not claiming it** (`validators/facts._disclaimed`). The CV rules REQUIRE
+  the cover letter to state a missing hard requirement plainly. Check 3 was a bare whole-word
+  regex over the whole letter, so "I haven't worked with LlamaIndex, FAISS, MongoDB, PyMuPDF,
+  Docling or BeautifulSoup specifically" scored one unevidenced-tech error per name — five
+  blocking errors on a true sentence, enough to burn both retries and end at
+  `log_fact_failure`. The exemption is deliberately narrow and its limits are what make it
+  safe: cover letter only (a bullet is a positive claim about a cited accomplishment and has
+  nothing to disclaim), the cue must PRECEDE the term in the SAME sentence, and bare "no"/
+  "not" are not cues — "Built the pipeline, not the prototype, on FAISS" must still fail.
+  `tests/test_negation_guard.py` pins every one of those limits; never widen the cue list
+  without adding the adversarial case that proves the gate still bites.
 - **Per-requirement matching, never blob cosine similarity.** Blob similarity only proves both
   texts are tech documents and yields no actionable gap report.
 - **The hard-gap gate is categorical, not a threshold.** A named hard requirement with zero
   evidence is a skip; rewriting cannot fix it (`max_blocking_hard_gaps`, currently 3 — raised
   from 1 because `analyze` now judges every hard requirement against the full profile, so what
   reaches this count is a higher-confidence real gap, not a keyword miss).
-  SOFT coverage stays pure keyword+semantic, untouched.
+  SOFT coverage stays pure keyword+semantic, untouched. On the agent path the gate runs
+  AFTER a draft exists, because one call returns both: a skipped job costs the full
+  drafting call (~$0.18) rather than `analyze` alone (~$0.05), and a crash inside that one
+  call banks no spend at all, since there is no earlier completed node to have recorded it.
+  Set `JOBPILOT_USE_AGENT_CV=false` for a skip-heavy batch.
 - **`validators/facts.py` is deterministic Python, never an LLM.** Highest-value guardrail here.
   Extend it with adversarial cases — especially tech named in the JD but absent from the profile.
   Never route it through a model, never soften it to make a run pass. It only ever receives HARD
@@ -157,6 +218,14 @@ worse than baseline · hard coverage 1.0 at the gate, zero fabricated claims pas
 `plan.md` and this file updated if a decision changed · `graphify update .` run.
 
 ## Current focus
+- [ ] `evals/golden/real_railway_ai_agents_alternation.txt` is checked in but has **no
+      baseline entry** — run `python evals/run_harness.py --update-baseline` to pin it. It is
+      the only fixture that exercises the slash / "such as" / "etc" typing rule.
+- [ ] Re-run the two-JD comparison now that both paths are inside the graph, and widen it
+      past two JDs — the agent path's requirement TYPING is what still differs (it filed 3
+      eligibility gates as `hard` where `analyze` filed them as disqualifiers; same
+      requirements, different buckets). The rails no longer care, but
+      `max_blocking_hard_gaps` counts `hard`, so the typing still moves the gate.
 - [ ] Backpressure limits (`plan.md` §19.2) are designed but **unimplemented** —
       `max_pending_review` 10, `max_tailored_per_day` 6, `max_per_company_days` 30. Nothing in
       `src/` enforces them, so the batch runner can outrun review. Check per job at claim time.

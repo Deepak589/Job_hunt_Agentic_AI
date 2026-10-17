@@ -120,6 +120,47 @@ def test_onsite_clause_is_decided_by_job_location_not_the_model() -> None:
     assert unknown.unknown  # job location missing: ask, don't guess
 
 
+def test_a_language_demand_typed_hard_still_reaches_the_language_rail(monkeypatch) -> None:
+    """The rails are chosen by what a requirement DOES, not by the bucket the model put
+    it in. `agent_cv` types and drafts in one call and does not always file an eligibility
+    gate as a disqualifier — good_jd's English clause and its "Pullach, nearby Munich"
+    on-site clause both came back `hard`. While the rails ran only on disqualifiers, a
+    German demand filed `hard` bypassed the language rail entirely and landed in the
+    `max_blocking_hard_gaps` budget, which is the one outcome "a language demand never
+    skips a job" exists to rule out."""
+    monkeypatch.setattr(analyze_mod, "language_requirement_verdict", lambda r: "unknown")
+    parsed = AnalysisOut(requirements=[_req("Fluent German required", "hard", "met")], matches=[])
+    [r], diagnosis, _ = to_state_update(parsed, "Berlin")
+    state = JobState(job=Job(id="j", source="manual", title="t", jd_text="x"), requirements=[r])
+
+    assert r.unknown and not r.covered
+    assert diagnosis.hard_gaps == [], "an unknown is a question, never a gap"
+    assert hard_gap_gate(state) == "proceed"
+
+
+def test_an_onsite_clause_typed_hard_is_still_decided_by_the_job_location() -> None:
+    parsed = AnalysisOut(requirements=[_req("On-site in Hamburg", "hard", "met")], matches=[])
+
+    [far], _, _ = to_state_update(parsed, "Hamburg, Germany")
+    [near], _, _ = to_state_update(parsed, "Berlin, Germany")
+    [unknown], _, _ = to_state_update(parsed, "")
+
+    assert not far.covered and not far.unknown
+    assert near.covered
+    assert unknown.unknown
+
+
+def test_soft_requirements_are_left_to_the_model(monkeypatch) -> None:
+    """Deliberately NOT railed. A soft item only moves a coverage number, so overriding it
+    would add review questions ("German is a plus" -> unknown -> open_questions) without
+    preventing anything."""
+    monkeypatch.setattr(analyze_mod, "language_requirement_verdict", lambda r: "unknown")
+    parsed = AnalysisOut(requirements=[_req("German is a plus", "soft", "met")], matches=[])
+    [r], _, _ = to_state_update(parsed, "Berlin")
+
+    assert r.covered and not r.unknown
+
+
 class _FakeProfile:
     raw = {"constraints": {}, "identity": {"location": "Berlin"}, "education": [], "profile_summary": {}}
     bullets = []

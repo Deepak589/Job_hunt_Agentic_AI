@@ -34,7 +34,24 @@ def _fake_rewrite(state):
     return {"draft": draft, "attempt_count": state.attempt_count + 1, "notes": ["stub rewrite"]}
 
 
+def _fake_agent_cv(state):
+    """The agent topology's single node does `analyze` AND `rewrite`, so its stub returns
+    the union of both stubs' updates — which is exactly the contract `agent_cv_node` has
+    with everything downstream."""
+    return {
+        **_fake_analyze(state),
+        **_fake_rewrite(state),
+        "graph_path": "agent_cv",
+        "notes": ["stub agent_cv"],
+    }
+
+
 def _patch_llm_nodes(monkeypatch) -> None:
+    """Patch BOTH topologies' drafting nodes, so these tests exercise whichever one
+    `settings.use_agent_cv` selects and cost nothing either way. Patching only
+    `analyze`/`rewrite` left the default (agent) path calling the real API — the failure
+    mode was an auth error inside the graph, not a skipped test."""
+    monkeypatch.setattr(graph_mod, "agent_cv_node", _fake_agent_cv)
     monkeypatch.setattr(graph_mod, "analyze", _fake_analyze)
     monkeypatch.setattr(graph_mod, "rewrite", _fake_rewrite)
     monkeypatch.setattr(graph_mod, "validate_facts_node", _fake_validate_facts)
@@ -181,13 +198,18 @@ def test_run_for_review_crash_persists_cost_like_run_does(monkeypatch, tmp_path)
     monkeypatch.setattr(graph_mod, "analyze", _fake_analyze)
 
     def _boom(state):
-        raise RuntimeError("simulated crash in rewrite")
+        raise RuntimeError("simulated crash while drafting")
 
+    # Crash whichever node drafts — `agent_cv` on the default topology, `rewrite` on the
+    # analyze one. What is under test is `_invoke_tracked`'s crash persistence, which is
+    # the same on both; patching only `rewrite` left the default path crashing on an
+    # unauthorized real API call instead, which persists a row for the wrong reason.
+    monkeypatch.setattr(graph_mod, "agent_cv_node", _boom)
     monkeypatch.setattr(graph_mod, "rewrite", _boom)
 
     import pytest
 
-    with pytest.raises(RuntimeError, match="simulated crash in rewrite"):
+    with pytest.raises(RuntimeError, match="simulated crash while drafting"):
         graph_mod.run_for_review("a crashing jd, quite unique", title="T", company="C")
 
     import sqlite3

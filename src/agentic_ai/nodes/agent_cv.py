@@ -1,33 +1,57 @@
-"""agent_cv — the single-call baseline path (NOT part of the graph).
+"""agent_cv — the ONE reasoning call that both diagnoses and drafts (graph node).
 
 One Sonnet call does all five roles of `Examples/CLAUDE.md` — diagnose, rewrite, review,
 recruiter screen, hiring-manager verdict — reading the JD and the profile together and
-returning a finished package. It exists to answer one question with numbers instead of
-impressions: does the manual flow's single reasoning pass beat the graph on the same JDs?
+returning a finished package.
 
-What stays deterministic, because these are the parts a model has got wrong before and the
-comparison must not be allowed to cheat on:
-  * the language and on-site rails (`analyze._apply_rails`) still override the model's
-    verdict on every disqualifier;
-  * `validate_facts` still runs, in REPORT mode — errors are counted and printed, never
-    used to block. Blocking is what the graph does; the point here is to measure how many
-    errors a judgment-first path actually produces.
+It started as a side path (`jobpilot agent-draft`) whose job was to answer one question
+with numbers: does the manual flow's single reasoning pass beat `analyze` + `rewrite`? It
+drafted better and cost less. But measured as a PIPELINE it was not one — it reached none
+of the machinery the graph already had, and it ran `validate_facts` in REPORT mode, which
+looks like a gate and is not: on `good_jd` it reported 5 fact errors and still returned
+`apply`. A report-only validator cannot tell a benign umbrella term from a real
+fabrication, and these documents go out with the candidate's name on them.
 
-Nothing in this module is imported by `graph.py`. Deleting it leaves the pipeline unchanged.
+So the call moved INSIDE the graph (`graph.build_graph`, `settings.use_agent_cv`) rather
+than the graph's guarantees being rebuilt around the call. `agent_cv_node` below replaces
+`analyze` + the first `rewrite`; everything downstream is untouched and therefore still
+true of this path: the categorical hard-gap gate, BLOCKING `validate_facts`, the
+`interrupt()` review checkpoint, `record_run`, dedupe, the cost ledger, `preferences.yaml`
+and MCP review visibility.
+
+What stays deterministic, because these are the parts a model has got wrong before:
+  * the language and on-site rails (`analyze._apply_rails`) override the model's verdict on
+    every gate-affecting requirement — by what the requirement does, NOT by the bucket this
+    call filed it under, which is the bug that scoping them to disqualifiers hid;
+  * `validate_facts` blocks, with the rewrite-retry loop behind it.
+
+`jobpilot agent-draft` still exists and still reports instead of blocking — it is the
+comparison harness, and the thing being compared must not change underneath it.
 """
 
 from __future__ import annotations
 
 import functools
 import json
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 from ..config import settings
 from ..llm import invoke_structured, make_structured
 from ..profile import Profile
-from ..state import Diagnosis, Draft, DraftBullet, DraftOut, Requirement, Scores
+from ..state import (
+    AtsVerdict,
+    Diagnosis,
+    Draft,
+    DraftBullet,
+    DraftOut,
+    HiringManagerVerdict,
+    JobState,
+    RecruiterResult,
+    Requirement,
+    Scores,
+)
 from .analyze import AnalysisOut, AnalyzedRequirement, _profile_brief, to_state_update
 from .rewrite import _to_capped_draft
 
@@ -60,8 +84,11 @@ class AgentCvResult(BaseModel):
     diagnosis: Diagnosis
     scores: Scores
     self_score: int
-    recruiter_verdict: str
-    final_verdict: str
+    # Narrower than `str` on purpose: these are handed straight to `RecruiterResult` and
+    # `HiringManagerVerdict`, whose fields are Literals. Widening them here would push a
+    # `type: ignore` into the node.
+    recruiter_verdict: Literal["pass", "soft_fail", "hard_fail"]
+    final_verdict: AtsVerdict
     verdict_reason: str
     llm_calls: list[dict]
 
@@ -150,3 +177,57 @@ def agent_cv(jd_text: str, job_location: str = "", verbose: bool = False) -> Age
         verdict_reason=parsed.verdict_reason,
         llm_calls=usage,
     )
+
+
+def agent_cv_node(state: JobState, verbose: bool = False) -> dict[str, Any]:
+    """`agent_cv` as a graph node — replaces `analyze` and the FIRST `rewrite` in one call.
+
+    Returns the union of what those two nodes returned, so nothing downstream had to
+    change: `hard_gap_gate` reads `requirements`, `validate_facts` reads `draft`,
+    `human_review` reads `draft` + `diagnosis`, `render_documents` and `score_ats` read
+    what they always did.
+
+    The three judgments only this path produces already have homes in `JobState`, so they
+    reach the review artifact instead of being printed to a terminal and lost:
+    `self_score` -> `scores.review_score`, `recruiter_verdict` -> `recruiter`,
+    `final_verdict` -> `hiring_manager`. The schema returns one `verdict_reason`, so both
+    of the latter two carry it; that is the model's own single explanation, not a copy
+    pretending to be two opinions.
+
+    `attempt_count` is incremented here because this call PRODUCED a draft — the retry
+    budget (`max_rewrite_attempts`) must count it, or a fact error would get one more
+    paid attempt on this path than on the `analyze` path.
+
+    Retries deliberately do NOT come back here. `fact_gate` routes a fact error to
+    `rewrite`, which receives the diagnosis and the exact errors and fixes only what they
+    name. Re-running this node instead would re-pay for requirement extraction and could
+    return a DIFFERENT requirement list after `hard_gap_gate` had already passed the first
+    one — a gate decision silently invalidated by its own retry.
+    """
+    if state.requirements and state.diagnosis is not None and state.draft is not None:
+        return {}  # prefilled (`_prefill`), already paid for
+
+    result = agent_cv(state.job.jd_text, job_location=state.job.location, verbose=verbose)
+    counts = {t: sum(1 for r in result.requirements if r.type == t) for t in ("hard", "soft", "disqualifier")}
+    bullet_count = sum(len(v) for v in result.draft.bullets.values())
+    return {
+        "requirements": result.requirements,
+        "diagnosis": result.diagnosis,
+        "scores": result.scores.model_copy(update={"review_score": result.self_score}),
+        "draft": result.draft,
+        "attempt_count": state.attempt_count + 1,
+        "recruiter": RecruiterResult(result=result.recruiter_verdict, reason=result.verdict_reason),
+        "hiring_manager": HiringManagerVerdict(verdict=result.final_verdict, why=result.verdict_reason),
+        # Recorded so `graph._resume` can rebuild the topology that WROTE a checkpoint:
+        # `aget_state` silently omits a pending task whose node the probe graph does not
+        # register, so probing an agent_cv checkpoint with an analyze graph reports it
+        # finished. None means the analyze path (every checkpoint written before this).
+        "graph_path": "agent_cv",
+        "notes": [
+            f"agent_cv: {len(result.requirements)} requirements {counts}, "
+            f"{len(result.diagnosis.hard_gaps)} hard gaps, {bullet_count} bullets, "
+            f"self_score {result.self_score}/10, recruiter {result.recruiter_verdict}, "
+            f"verdict {result.final_verdict}"
+        ],
+        "llm_calls": result.llm_calls,
+    }
