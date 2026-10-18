@@ -54,8 +54,9 @@ the gate, the blocking validator, the review interrupt, the render/score tail, a
 Removed: separate extract / evidence-retrieval / coverage / judge / diagnose nodes, and the LLM
 `review`, `recruiter_sim`, `hiring_manager` nodes (originals are on `main`). Kept in code after
 `analyze`: the language-below-fluency and on-site-location rails (`coverage.py`), the categorical
-gate, `validate_facts`, rendering, ATS score. `rewrite` must include every profile bullet and only
-reorder by JD relevance (`prompts/rewrite.md`).
+gate, `validate_facts`, rendering, ATS score. `rewrite` must include every EXPERIENCE bullet and
+at most `max_bullets_per_project` (2) per project, reordering by JD relevance and never merging
+(`prompts/rewrite.md`, same wording in `prompts/agent_cv.md` — keep them in sync).
 
 ## Commands
 ```bash
@@ -125,6 +126,22 @@ Manual JD input is the primary path; ingest is the supplement.
   "not" are not cues — "Built the pipeline, not the prototype, on FAISS" must still fail.
   `tests/test_negation_guard.py` pins every one of those limits; never widen the cue list
   without adding the adversarial case that proves the gate still bites.
+- **The project-bullet cap is per PROJECT, and a selection rather than a truncation.**
+  `max_bullets_per_section` (20) cannot express it: every project lands in the one "projects"
+  section, so 20 never fired on 17 project bullets across 5 projects and a five-bullet project
+  crowded out a two-bullet one. `_capped_per_project` keeps the first
+  `max_bullets_per_project` (2) per `parent_id` in the model's emitted order, which both
+  prompts define as strongest-and-most-JD-relevant first — so order IS the selection
+  criterion, and changing the prompts' definition of that order changes which bullets ship.
+  EXPERIENCE is deliberately uncapped (4 bullets across 2 roles; work history is read first).
+  The prompts state the cap so the model picks two deliberately; the code is the backstop for
+  when it does not, and a bullet with an unknown `source_bullet_id` is always kept so
+  `validate_facts` can still report it. Costs ats.py's "literal keywords" (20 pts), which
+  counts evidenced JD terms appearing verbatim in the rendered PDF — hence the prompts' "by
+  JD-term coverage first". "hard req coverage" (55 pts) and the gate are unaffected: `analyze`
+  judges requirements against the whole profile, never against the draft. Restore the old
+  behaviour with `JOBPILOT_MAX_BULLETS_PER_PROJECT=20`; do not instead delete the cap, and do
+  not cap experience to make a page fit.
 - **Per-requirement matching, never blob cosine similarity.** Blob similarity only proves both
   texts are tech documents and yields no actionable gap report.
 - **The hard-gap gate is categorical, not a threshold.** A named hard requirement with zero

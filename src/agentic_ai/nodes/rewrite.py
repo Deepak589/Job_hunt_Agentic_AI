@@ -58,6 +58,42 @@ def _capped_bullets(bullets: dict[str, list[DraftBullet]]) -> dict[str, list[Dra
     return capped
 
 
+def _capped_per_project(
+    items: list[DraftBullet], profile: Profile
+) -> list[DraftBullet]:
+    """Keep at most `max_bullets_per_project` bullets per project, in the order the model
+    emitted them.
+
+    The per-section cap cannot do this: every project lands in the single "projects"
+    section, so 20/section never fires on 17 project bullets across 5 projects, and the
+    projects with five bullets drowned out the ones with two.
+
+    Order is the selection criterion on purpose. Both prompts define the flat `bullets`
+    list as print order, strongest and most JD-relevant first within each project, so
+    "first two" is the model's own ranking rather than an arbitrary slice — and the prompts
+    now state the cap, so the model picks two deliberately instead of emitting five and
+    having four silently dropped here. This stays as the structural backstop for when it
+    does not, in the same spirit as `_capped_bullets`.
+
+    A bullet whose `source_bullet_id` is unknown has no project to count against and is
+    always kept: `validate_facts` reports the unknown id, and swallowing the bullet here
+    would hide the error it is supposed to raise.
+    """
+    kept: list[DraftBullet] = []
+    seen: dict[str, int] = {}
+    for b in items:
+        source = profile.by_id(b.source_bullet_id)
+        if source is None or source.parent_id is None:
+            kept.append(b)
+            continue
+        count = seen.get(source.parent_id, 0)
+        if count >= settings.max_bullets_per_project:
+            continue
+        seen[source.parent_id] = count + 1
+        kept.append(b)
+    return kept
+
+
 def _to_capped_draft(parsed: DraftOut, profile: Profile, order: list[str]) -> Draft:
     """DraftOut (flat bullet list from the model) -> Draft (bullets by section, which the
     renderer, validators and review all read). The section comes from the profile, not the
@@ -72,6 +108,8 @@ def _to_capped_draft(parsed: DraftOut, profile: Profile, order: list[str]) -> Dr
         # reports the unknown id itself.
         section = "experience" if source is not None and source.parent_id in experience_ids else "projects"
         grouped.setdefault(section, []).append(b)
+    if "projects" in grouped:
+        grouped["projects"] = _capped_per_project(grouped["projects"], profile)
     capped = _capped_bullets(grouped)
     if not any(capped.values()):
         raise RuntimeError(

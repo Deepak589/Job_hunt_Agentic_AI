@@ -24,13 +24,19 @@ use a number that isn't that bullet's own `metric`. If the bullet's `status` is
 ## What to do
 
 1. Follow the given `section_order`. Don't invent an order.
-2. Include everything. Every bullet of every experience entry and every project in the
-   profile goes into the CV: drop nothing, merge nothing, add nothing. One output bullet per
-   profile bullet, each `source_bullet_id` used once. You change only the wording and the
-   order. Order by this JD: in each section put the roles or projects that best answer the
-   JD's hard requirements first, and inside each one the strongest bullets first. Projects
-   in `diagnosis.matches` go near the top of their section. Which section leads is already
-   set by `section_order`.
+2. Experience: include everything. Every bullet of every experience entry goes into the
+   CV — drop nothing, merge nothing, add nothing.
+   Projects: **at most 2 bullets per project.** Pick the two that answer THIS JD best, by
+   JD-term coverage first and strength second — the two together should carry as many of
+   the JD's evidenced terms as any pair from that project can, because the ATS scan counts
+   terms appearing verbatim in the rendered CV. Prefer two bullets that cover different
+   requirements over two that make the same point twice. Never merge two bullets into one
+   to fit the cap, and never move a project's bullet under another project.
+   Everywhere: one output bullet per profile bullet, each `source_bullet_id` used at most
+   once, and you change only the wording and the order. Order by this JD: in each section
+   put the roles or projects that best answer the JD's hard requirements first, and inside
+   each one the strongest bullets first. Projects in `diagnosis.matches` go near the top of
+   their section. Which section leads is already set by `section_order`.
 3. Write a profile line of 2-3 sentences that leads with what THIS JD rewards.
 4. JD wording: if the profile backs a JD term (its skills, stack, a bullet's text, the
    summary), use the JD's spelling — that is what an ATS scans for. That includes the

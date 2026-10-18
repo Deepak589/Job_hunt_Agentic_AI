@@ -125,6 +125,24 @@ class Settings(BaseSettings):
     max_bullets_per_section: int = 20
     max_bullet_chars: int = 220
 
+    # Per-PROJECT cap, which the per-section cap above cannot express: every project lands
+    # in the one "projects" section, so 20/section never bites on 17 project bullets spread
+    # across 5 projects. A reader scanning a one-page CV does not read five bullets about
+    # one project; the long entries buried the short ones. Experience is deliberately NOT
+    # capped — there are 4 experience bullets across 2 roles, and real work history is what
+    # a recruiter reads first.
+    #
+    # Costs something real: ats.py's "literal keywords" component (20 pts) counts evidenced
+    # JD terms appearing VERBATIM in the rendered PDF, so less bullet text is less keyword
+    # surface. Mitigated in the prompts, not here — both `rewrite.md` and `agent_cv.md` now
+    # tell the model to pick the two bullets per project that carry the most JD-relevant
+    # terms, so the trim is a selection rather than a truncation. "hard req coverage"
+    # (55 pts) is unaffected: `analyze` judges requirements against the whole profile, not
+    # against the draft, so trimming the draft cannot move the gate.
+    #
+    # Set JOBPILOT_MAX_BULLETS_PER_PROJECT=20 to restore the previous all-bullets behaviour.
+    max_bullets_per_project: int = 2
+
     # --- tracing (optional) ---
     # Unset by default -> tracing is a no-op. Set all three to enable Langfuse.
     langfuse_public_key: str | None = None

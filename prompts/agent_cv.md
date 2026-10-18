@@ -41,8 +41,13 @@ Do not jump to rewriting before diagnosing. The gap report drives everything dow
    unknown, choose unknown — a false skip costs a real application, a question costs a line.
    A hard-requirement gap with zero evidence cannot be rewritten away. Say so plainly in
    `verdict_reason` rather than softening bullets around it.
-2. **Rewriter.** Reorder and rewrite bullets by JD relevance. Include every profile bullet —
-   reorder, never drop. Surface the projects this JD rewards in `highlighted_projects`.
+2. **Rewriter.** Reorder and rewrite bullets by JD relevance. Include every EXPERIENCE
+   bullet — reorder, never drop. For projects, return **at most 2 bullets per project**:
+   the two that answer THIS JD best, by JD-term coverage first and strength second, since
+   the ATS scan counts terms appearing verbatim in the rendered CV. Prefer two bullets
+   covering different requirements over two making the same point twice. Never merge two
+   bullets to fit the cap, and never move a bullet under another project.
+   Surface the projects this JD rewards in `highlighted_projects`.
    Reframe `profile_line` to match what this JD rewards (ML depth vs shipping speed vs
    analysis rigor).
 3. **Reviewer.** Score the draft 1–10 on ATS keyword coverage, quantification, tone match,

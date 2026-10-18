@@ -648,6 +648,29 @@ Fallback if a docx is specifically requested: render Typst → PDF as the primar
 keep a separate `docx` path via the docx skill for the rare portal that demands `.docx`. Do not
 make docx the primary — the PDF is what you send 95% of the time.
 
+### 10.1 Length budget (implemented; this section's Typst choice was superseded — see CLAUDE.md)
+
+Three limits, all `config.Settings` fields, enforced in `nodes/rewrite.py::_to_capped_draft`,
+which both the two-call path and `agent_cv` go through:
+
+| limit | default | scope |
+|---|---|---|
+| `max_bullet_chars` | 220 | one bullet, truncated only where it would not cut off its own `metric` |
+| `max_bullets_per_section` | 20 | runaway-model guard; never bites on real profile content |
+| `max_bullets_per_project` | 2 | per `parent_id` inside the projects section |
+
+`max_bullets_per_project` is the one that shapes a real draft. The profile holds 17 project
+bullets across 5 projects, so the per-section cap never fired and the five-bullet projects
+crowded out the two-bullet ones. The cap keeps the first N per project in the model's emitted
+order — which both prompts define as strongest and most JD-relevant first, so the ordering rule
+is what decides which bullets ship. EXPERIENCE is uncapped on purpose (4 bullets, 2 roles).
+
+Interaction with §6: this trims the DRAFT, not the profile, so `hard req coverage` (55 pts) and
+`hard_gap_gate` are untouched — `analyze` judges every requirement against the whole profile.
+`literal keywords` (20 pts) does move, because it counts evidenced JD terms appearing verbatim
+in the rendered PDF, which is why both prompts rank the two kept bullets by JD-term coverage
+before strength. Watch that component in `evals/` after any change to the ordering rule.
+
 ---
 
 ## 11. Persistence
