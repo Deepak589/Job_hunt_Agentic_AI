@@ -45,9 +45,10 @@ commit. If it was skipped, say so in the closing summary.
 
 ## Pipeline
 Slimmed to match the manual flow in `Examples/CLAUDE.md`: one reasoning call, deterministic
-guards around it, a human as the reviewer. Work branch is `agent-path`; `main` still holds the
-pre-slim graph with the separate extract/evidence/judge nodes, which is what "originals are on
-`main`" below refers to. There is no `slim-agent` branch.
+guards around it, a human as the reviewer. `agent-path` was fast-forwarded into `main` on
+2026-10-19, so `main` IS the slim graph. The pre-slim graph with the separate
+extract/evidence/judge nodes lives on `main-old` (`7c91290`), which is what "originals are on
+`main-old`" below refers to. There is no `slim-agent` branch.
 ```
 load_job → agent_cv (ONE LLM call: requirements + verdicts + full draft + 3 judgments)
   ├─ hard gap / unmet disqualifier → log_skip → END
@@ -76,7 +77,7 @@ blocking validator, the review interrupt, the render/score tail, and the
 `run`/`run_many`/`run_for_review` entry points — so `record_run`, dedupe, the cost ledger,
 `preferences.yaml` and MCP review visibility apply to either.
 Removed: separate extract / evidence-retrieval / coverage / judge / diagnose nodes, and the LLM
-`review`, `recruiter_sim`, `hiring_manager` nodes (originals are on `main`). Kept in code after
+`review`, `recruiter_sim`, `hiring_manager` nodes (originals are on `main-old`). Kept in code after
 `analyze`: the language-below-fluency and on-site-location rails (`coverage.py`), the categorical
 gate, `validate_facts`, rendering, ATS score. `rewrite` must include every EXPERIENCE bullet and
 at most `max_bullets_per_project` (2) per project, reordering by JD relevance and never merging
@@ -280,7 +281,7 @@ constructs a client with it** — requirement extraction moved inside `analyze` 
 on Sonnet. So the old "Haiku for extraction" rule no longer describes what runs; the reason it was
 true still holds, and `role_classifier_model` is the one place it is still applied.
 `review_model`, `recruiter_model`, `hiring_manager_model` and `requirement_judge_model` are DEAD
-fields — zero references in `src/`. They are kept so the `main` topology still configures, not
+fields — zero references in `src/`. They are kept so the `main-old` topology still configures, not
 because anything reads them; don't wire a new node to one without saying so here.
 Never collapse to one model — Opus on requirement extraction is ~10x cost for no quality gain.
 Embeddings stay local, keeping the stack to one API key.
@@ -290,7 +291,7 @@ Embeddings stay local, keeping the stack to one API key.
 worse than baseline · hard coverage 1.0 at the gate, zero fabricated claims past `validate_facts` ·
 `plan.md` and this file updated if a decision changed · `graphify update .` run.
 
-**None of those three are clean on `agent-path` right now** (measured 2026-10-19), so "clean" means
+**None of those three are clean on `main` right now** (measured 2026-10-19), so "clean" means
 *no worse than this baseline* until the drift below is fixed — diff the failure set, don't read a
 red run as your own breakage:
 - `pytest`: 33 failing / 320 passing. Concentrated in `test_profile.py` and
@@ -327,7 +328,7 @@ red run as your own breakage:
 - [ ] Stale docstrings left by the slimming, in code so not touched by the 2026-10-19 doc pass:
       `cli.review` still says an edit "re-runs recruiter_sim/hiring_manager", and
       `coverage.retrieve_evidence` / `score_coverage` are dead code the slim graph never calls.
-      Decide per item whether to delete or re-wire; don't let the docstrings keep describing `main`.
+      Decide per item whether to delete or re-wire; don't let the docstrings keep describing `main-old`.
 - [ ] Retrieval (Chroma + bge-m3 + reranker) is built, calibrated and unused — see Stack. Either
       put it back in the live path or move it behind an explicit "offline tools" heading in
       `plan.md` §5, because right now the dependency cost is paid on every `uv sync` for a
