@@ -4,7 +4,12 @@ logic (reordering, score attachment, cosine preserved) rather than the model."""
 
 from __future__ import annotations
 
-import chromadb
+import pytest
+
+# chromadb lives in the optional `retrieval` extra (see pyproject.toml), so this module
+# skips rather than fails the suite on a base install. Run it with:
+#   uv sync --extra dev --extra retrieval
+chromadb = pytest.importorskip("chromadb", reason="needs the optional `retrieval` extra")
 
 from agentic_ai import evidence, repo_docs
 from agentic_ai.profile import Profile

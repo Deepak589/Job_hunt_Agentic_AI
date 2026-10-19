@@ -26,15 +26,20 @@ commit. If it was skipped, say so in the closing summary.
 - LangGraph 0.6+, `langchain-anthropic` + `langchain-core` 1.0. **Anthropic only** — Groq and OpenAI
   were dropped deliberately; a second provider costs another SDK, auth path, rate-limit regime and
   set of structured-output quirks for marginal savings.
-- Retrieval — **built, calibrated, and NOT in the live path.** local `sentence-transformers` /
+- Retrieval — **an OPTIONAL EXTRA, not in the live path.** local `sentence-transformers` /
   **`BAAI/bge-m3`** (multilingual — German JDs appear in English-role searches), Chroma at
   `data/chroma`, reranker `ms-marco-MiniLM-L-6-v2`. Reachable only through `jobpilot index
-  build|calibrate`; `evidence.py` is imported lazily by `coverage.retrieve_evidence`, whose own
-  comment says "unused by the slim graph", and nothing in `nodes/` or `graph.py` calls
-  `retrieve_evidence` or `score_coverage`. The slim pipeline decides coverage inside the one
-  reasoning call instead (see Pipeline). `sem_threshold` still matters because it is what
-  `calibrate` tunes and what the keyword/semantic split in §6 documents — do not read it as a
-  number the per-job run consults today.
+  build|calibrate`; `coverage.retrieve_evidence` and `score_coverage` are the only callers of
+  `evidence.py` and the slim graph calls neither, so a per-job run never touches it — coverage
+  is decided inside the one reasoning call instead (see Pipeline). The two heavy deps therefore
+  live in the `retrieval` extra: **`uv sync --extra dev` does NOT install them**, and
+  `uv sync --extra dev --extra retrieval` does. `evidence.py` imports both at CALL time behind
+  `_require`, which raises an instruction rather than an ImportError, and
+  `tests/test_evidence.py` skips itself without them (`pytest.importorskip`). Nothing was
+  deleted — code, the calibration record in `config.sem_threshold`, and the index at
+  `data/chroma` are all intact, so adding the extra restores the subsystem unchanged.
+  `sem_threshold` is what `calibrate` tunes and what the keyword/semantic split in §6
+  documents; it is not a number a per-job run consults today.
 - Storage: **stdlib `sqlite3`, no ORM** — `data/jobpilot.db` (jobs, runs, cost) and
   `data/checkpoints.db` (LangGraph `AsyncSqliteSaver`, WAL).
 - Ingest: `httpx`, `tenacity`, `trafilatura`, `extruct`, `lingua`. No headless browser.
@@ -95,6 +100,7 @@ jobpilot profile init | profile check        # drift gate, run before any CV bui
 jobpilot source arbeitnow | source adzuna | run
 jobpilot agent-draft <job_id>                # comparison harness only, report-only, see below
 ./build_cv.sh                                # cv_data.json → main_cv_v2.pdf
+uv sync --extra dev --extra retrieval        # only if you need index build|calibrate
 pytest -q && ruff check . && mypy src        # + pytest evals/ for the golden set
 ```
 Manual JD input is the primary path; ingest is the supplement.
@@ -329,7 +335,13 @@ red run as your own breakage:
       `cli.review` still says an edit "re-runs recruiter_sim/hiring_manager", and
       `coverage.retrieve_evidence` / `score_coverage` are dead code the slim graph never calls.
       Decide per item whether to delete or re-wire; don't let the docstrings keep describing `main-old`.
-- [ ] Retrieval (Chroma + bge-m3 + reranker) is built, calibrated and unused — see Stack. Either
-      put it back in the live path or move it behind an explicit "offline tools" heading in
-      `plan.md` §5, because right now the dependency cost is paid on every `uv sync` for a
-      subsystem no per-job run touches.
+- [x] Retrieval moved to the `retrieval` optional extra and documented as an offline tool
+      (`plan.md` §5 header, Stack above). Decided 2026-10-19: do NOT wire it back into the live
+      path — the one reasoning call reads JD + full profile together and beats cosine at this
+      job, and §6's own calibration record says the semantic margin is 0.0045 wide and that
+      named tech rides the keyword half. Revisit only if the reasoning call proves unreliable
+      on paraphrase, which `evals/` would show first.
+- [ ] `data/checkpoints.db` has no pruning: 33MB / 1,111 checkpoints / 3,819 writes for 20 jobs,
+      because every node writes a checkpoint per attempt and finished threads are never cleared.
+      It grows without bound. A `jobpilot prune [--keep-days N]` that drops threads whose run
+      reached a terminal verdict would fix it; do not prune a thread still pending review.

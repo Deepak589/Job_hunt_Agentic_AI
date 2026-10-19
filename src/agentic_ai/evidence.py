@@ -14,20 +14,55 @@ score against a specific bullet id does.
 from __future__ import annotations
 
 import functools
-
-import chromadb
-from chromadb.api.models.Collection import Collection
+from types import ModuleType
+from typing import TYPE_CHECKING
 
 from . import repo_docs
 from .config import settings
 from .profile import Profile
 from .state import Evidence
 
+if TYPE_CHECKING:  # annotations only — `from __future__ import annotations` keeps them strings
+    import chromadb
+    from chromadb.api.models.Collection import Collection
+
+# This module is the ONLY thing in the package that needs chromadb / sentence-transformers,
+# and nothing in `nodes/` or `graph.py` reaches it: `coverage.retrieve_evidence` and
+# `score_coverage` are its only callers and the slim graph calls neither. So the two heavy
+# dependencies (chromadb, and sentence-transformers pulling torch — ~3GB resolved) live in
+# the `retrieval` extra rather than in the base install, and every entry point into this
+# file imports them at CALL time behind `_require`. Consequences worth knowing:
+#   - `uv sync --extra dev` no longer installs them; `jobpilot index build|calibrate` then
+#     fails with the message below instead of an ImportError traceback.
+#   - `tests/test_evidence.py` skips itself when the extra is absent.
+#   - Nothing else changes. The code, the calibration record in config.sem_threshold and
+#     the on-disk index at data/chroma are all untouched, so re-adding the extra restores
+#     the subsystem exactly as it was.
+
+
+def _require(module: str, what: str) -> ModuleType:
+    """Import a `retrieval`-extra module, or explain how to get it.
+
+    A bare ImportError here reads as a broken install. It is not — it is a deliberately
+    optional subsystem, and the fix is one command, so say so.
+    """
+    try:
+        return __import__(module)
+    except ImportError as e:  # pragma: no cover - depends on the installed extras
+        raise RuntimeError(
+            f"{what} needs the optional `retrieval` extra ({module} is not installed).\n"
+            "Install it with:  uv sync --extra dev --extra retrieval\n"
+            "The per-job pipeline does not use retrieval — see the Stack section of "
+            "CLAUDE.md — so the base install leaves out chromadb and sentence-transformers "
+            "(torch)."
+        ) from e
+
 
 @functools.lru_cache(maxsize=1)
 def _embedder():
     """bge-m3, loaded once. Multilingual: German JDs appear even when filtering for
     English roles, and an English-only embedder scores them near-random (§5.2)."""
+    _require("sentence_transformers", "the embedding model")
     from sentence_transformers import SentenceTransformer
 
     return SentenceTransformer(settings.embedding_model)
@@ -39,6 +74,7 @@ def _reranker():
     candidate) jointly instead of comparing separately-embedded vectors, so it can catch
     cases where the bi-encoder's cosine top-1 isn't really the best match (config.py
     sem_threshold comment: the documented upgrade path)."""
+    _require("sentence_transformers", "the cross-encoder reranker")
     from sentence_transformers import CrossEncoder
 
     return CrossEncoder(settings.reranker_model)
@@ -61,6 +97,7 @@ def rerank(query: str, candidates: list[Evidence]) -> list[Evidence]:
 
 
 def _client() -> chromadb.ClientAPI:
+    chromadb = _require("chromadb", "the evidence store")
     settings.chroma_path.mkdir(parents=True, exist_ok=True)
     return chromadb.PersistentClient(path=str(settings.chroma_path))
 

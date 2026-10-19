@@ -15,9 +15,7 @@ dependencies = [
     "langchain-anthropic>=1.5.6",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
-    # retrieval
-    "sentence-transformers>=3.3",
-    "chromadb>=0.5",
+    # retrieval: see [project.optional-dependencies].retrieval — NOT in the base install
     # ingest
     "httpx>=0.28",
     "tenacity>=9.0",
@@ -37,6 +35,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# The evidence store (src/agentic_ai/evidence.py) is built and calibrated but is NOT in the
+# per-job path: `coverage.retrieve_evidence` / `score_coverage` are its only callers and the
+# slim graph calls neither, so a run never touches it. Keeping torch in the base install made
+# every `uv sync` pay ~3GB for a subsystem no job uses. The code, the calibration record in
+# `config.sem_threshold` and the on-disk index at `data/chroma` are untouched — installing
+# this extra restores the subsystem exactly as it was.
+#   uv sync --extra dev --extra retrieval
+retrieval = [
+    "sentence-transformers>=3.3",
+    "chromadb>=0.5",
+]
 tracing = [
     "langchain>=1.4.1",
     "langfuse>=2.53",
@@ -64,3 +73,11 @@ target-version = "py313"
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]
+
+# chromadb and sentence-transformers are in the optional `retrieval` extra, so a base
+# install has neither installed nor stubbed. Without this, `mypy src` — which the
+# definition of done requires — would report import-not-found for evidence.py's
+# TYPE_CHECKING imports and pass or fail depending on which extras happen to be present.
+[[tool.mypy.overrides]]
+module = ["chromadb.*", "sentence_transformers.*"]
+ignore_missing_imports = true

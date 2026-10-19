@@ -12,7 +12,6 @@ name = "agentic-ai"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "chromadb" },
     { name = "extruct" },
     { name = "httpx" },
     { name = "jinja2" },
@@ -28,7 +27,6 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "rich" },
     { name = "ruamel-yaml" },
-    { name = "sentence-transformers" },
     { name = "structlog" },
     { name = "tenacity" },
     { name = "trafilatura" },
@@ -43,6 +41,10 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "ruff" },
 ]
+retrieval = [
+    { name = "chromadb" },
+    { name = "sentence-transformers" },
+]
 tracing = [
     { name = "langchain" },
     { name = "langfuse" },
@@ -50,7 +52,7 @@ tracing = [
 
 [package.metadata]
 requires-dist = [
-    { name = "chromadb", specifier = ">=0.5" },
+    { name = "chromadb", marker = "extra == 'retrieval'", specifier = ">=0.5" },
     { name = "extruct", specifier = ">=0.17" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "ipykernel", marker = "extra == 'dev'", specifier = ">=7.3.0" },
@@ -73,13 +75,13 @@ requires-dist = [
     { name = "rich", specifier = ">=13.9" },
     { name = "ruamel-yaml", specifier = ">=0.18" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
-    { name = "sentence-transformers", specifier = ">=3.3" },
+    { name = "sentence-transformers", marker = "extra == 'retrieval'", specifier = ">=3.3" },
     { name = "structlog", specifier = ">=24.4" },
     { name = "tenacity", specifier = ">=9.0" },
     { name = "trafilatura", specifier = ">=2.0" },
     { name = "typer", specifier = ">=0.15" },
 ]
-provides-extras = ["tracing", "dev"]
+provides-extras = ["retrieval", "tracing", "dev"]
 
 [[package]]
 name = "aiohappyeyeballs"

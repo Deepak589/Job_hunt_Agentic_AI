@@ -324,7 +324,28 @@ Adding a source = one class. No graph changes.
 
 ---
 
-## 5. Evidence store — the thing that makes this better than prompting
+## 5. Evidence store — OFFLINE TOOL, not in the per-job path
+
+> **Status as of 2026-10-19: built, calibrated, and not wired in.** `coverage.retrieve_evidence`
+> and `score_coverage` are the only callers of `evidence.py`, and the slim graph (§1) calls
+> neither — a per-job run never touches Chroma. The two heavy dependencies moved to the
+> `retrieval` optional extra (`uv sync --extra dev --extra retrieval`), so a base install
+> leaves out chromadb and sentence-transformers/torch; `jobpilot index build|calibrate` then
+> fails with an instruction instead of an ImportError, and `tests/test_evidence.py` skips.
+> Nothing was deleted: the code, the calibration record in `config.sem_threshold` and the
+> on-disk index at `data/chroma` are intact, so installing the extra restores it as it was.
+>
+> Why it is out: `analyze` / `agent_cv` read the JD and the FULL profile in one call and judge
+> each requirement directly, which beats cosine similarity at this specific job — an embedding
+> cannot conclude "LangChain covers the LLM requirement", and the reasoning call can. The
+> calibration in §6 also records that the semantic margin is only 0.0045 wide (down from 0.0328
+> once real JD text was used as probes), with "Production experience with Apache Kafka" scoring
+> 0.5462 against a Docker/AWS bullet holding no Kafka. The conclusion there — named technologies
+> ride the KEYWORD half — is what makes the semantic half optional rather than load-bearing.
+>
+> The rest of this section is the original design, kept because it is still what
+> `index build|calibrate` implements and what to restore if the reasoning call ever proves
+> unreliable on paraphrase.
 
 This is the core upgrade over "embed CV, embed JD, cosine similarity". A blended similarity
 score is a mushy signal: it rates "both documents are about tech" highly and tells you nothing
