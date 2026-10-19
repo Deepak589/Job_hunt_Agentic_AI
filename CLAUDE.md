@@ -26,8 +26,15 @@ commit. If it was skipped, say so in the closing summary.
 - LangGraph 0.6+, `langchain-anthropic` + `langchain-core` 1.0. **Anthropic only** — Groq and OpenAI
   were dropped deliberately; a second provider costs another SDK, auth path, rate-limit regime and
   set of structured-output quirks for marginal savings.
-- Retrieval: local `sentence-transformers` / **`BAAI/bge-m3`** (multilingual — German JDs appear in
-  English-role searches), Chroma at `data/chroma`, reranker `ms-marco-MiniLM-L-6-v2`.
+- Retrieval — **built, calibrated, and NOT in the live path.** local `sentence-transformers` /
+  **`BAAI/bge-m3`** (multilingual — German JDs appear in English-role searches), Chroma at
+  `data/chroma`, reranker `ms-marco-MiniLM-L-6-v2`. Reachable only through `jobpilot index
+  build|calibrate`; `evidence.py` is imported lazily by `coverage.retrieve_evidence`, whose own
+  comment says "unused by the slim graph", and nothing in `nodes/` or `graph.py` calls
+  `retrieve_evidence` or `score_coverage`. The slim pipeline decides coverage inside the one
+  reasoning call instead (see Pipeline). `sem_threshold` still matters because it is what
+  `calibrate` tunes and what the keyword/semantic split in §6 documents — do not read it as a
+  number the per-job run consults today.
 - Storage: **stdlib `sqlite3`, no ORM** — `data/jobpilot.db` (jobs, runs, cost) and
   `data/checkpoints.db` (LangGraph `AsyncSqliteSaver`, WAL).
 - Ingest: `httpx`, `tenacity`, `trafilatura`, `extruct`, `lingua`. No headless browser.
@@ -37,19 +44,36 @@ commit. If it was skipped, say so in the closing summary.
 - `pytest` · `ruff` (line-length 100) · `mypy --strict` + pydantic plugin.
 
 ## Pipeline
-Slimmed (branch `slim-agent`) to match the manual flow in `Examples/CLAUDE.md`: one reasoning
-call, deterministic guards around it, a human as the reviewer.
+Slimmed to match the manual flow in `Examples/CLAUDE.md`: one reasoning call, deterministic
+guards around it, a human as the reviewer. Work branch is `agent-path`; `main` still holds the
+pre-slim graph with the separate extract/evidence/judge nodes, which is what "originals are on
+`main`" below refers to. There is no `slim-agent` branch.
 ```
 load_job → agent_cv (ONE LLM call: requirements + verdicts + full draft + 3 judgments)
   ├─ hard gap / unmet disqualifier → log_skip → END
-  └─ validate_facts (deterministic, BLOCKING; retry max 2 → rewrite, never agent_cv)
-       ├─ fail → log_fact_failure → END
-       └─ [human_review: interrupt()] → render_documents → score_ats
+  └─ proceed → validate_facts        # agent path arrives WITH a draft, so it skips rewrite
+                                     # analyze path: proceed → rewrite → validate_facts
+       validate_facts (deterministic, BLOCKING)
+         ├─ retry (attempts left)  → rewrite → validate_facts   # never back through agent_cv
+         ├─ give_up                → log_fact_failure → END
+         └─ clean                  → human_review ─ reject  → END
+                                                  ├ edit    → human_review   (loops on itself)
+                                                  └ approve → render_documents → score_ats → END
 ```
+`build_graph` takes two flags that remove parts of that tail: `skip_render=True` ends at a clean
+`validate_facts`, and `review_pause=False` (the default for `run`/`run_many`) wires `clean`
+straight to `render_documents` with no `human_review` node in the graph at all. `max_rewrite_attempts`
+is 2.
 `settings.use_agent_cv` (default True) picks who drafts: `agent_cv` (one call) or the
-two-call `analyze` → `rewrite`. It moves one node and nothing else — both topologies share
-the gate, the blocking validator, the review interrupt, the render/score tail, and the
-`run`/`run_many`/`run_for_review` entry points, so `record_run`, dedupe, the cost ledger,
+two-call `analyze` → `rewrite`. Two things differ and nothing else: which node `load_job`
+feeds, and where the gate's `proceed` branch lands (`validate_facts` on the agent path,
+because the draft already exists; `rewrite` on the analyze path, because it does not).
+`load_job` itself is a one-line wrapper per path (`load_job_agent_path` /
+`load_job_analyze_path`) that stamps `graph_path` and delegates to the same `load_job` — the
+stamp has to happen here, not in the drafting node, or a crashed node records nothing and
+`resume` reads the crash as "already finished". Everything else is shared: the gate, the
+blocking validator, the review interrupt, the render/score tail, and the
+`run`/`run_many`/`run_for_review` entry points — so `record_run`, dedupe, the cost ledger,
 `preferences.yaml` and MCP review visibility apply to either.
 Removed: separate extract / evidence-retrieval / coverage / judge / diagnose nodes, and the LLM
 `review`, `recruiter_sim`, `hiring_manager` nodes (originals are on `main`). Kept in code after
@@ -68,6 +92,7 @@ jobpilot cost [--days N] | judge-stats
 jobpilot index build [--force] | index calibrate
 jobpilot profile init | profile check        # drift gate, run before any CV build
 jobpilot source arbeitnow | source adzuna | run
+jobpilot agent-draft <job_id>                # comparison harness only, report-only, see below
 ./build_cv.sh                                # cv_data.json → main_cv_v2.pdf
 pytest -q && ruff check . && mypy src        # + pytest evals/ for the golden set
 ```
@@ -192,18 +217,36 @@ Manual JD input is the primary path; ingest is the supplement.
   `interrupt_before` — that was a real runtime bug in v1.
 - **No supervisor agent.** The LangGraph edges *are* the orchestration; every routing decision is
   encodable (gate = boolean, review loop = threshold, attempts = counter). The answer to "should
-  batching be an agent" is `batch.py` / `runner.py`.
+  batching be an agent" is `graph.run_many` (one `AsyncSqliteSaver`, concurrent `ainvoke`) for a
+  list of JDs and `runner.py` for the company watcher. There is no `batch.py`.
 - **No code path that sends, submits or posts.** The human checkpoint is structural, not a setting.
 - **No LLM node writes long-term memory.** Writes are deterministic (episodic/outcome SQLite) or
   human-approved (`preferences.yaml`, only from review edits).
 - **`sem_threshold` (0.5558) is calibrated, not guessed** — 15 probes, margin 0.0045. Named tech
   rides the keyword half of §6; semantic is the paraphrase catcher. If a real JD is misjudged,
   rerank top-k — do not push the number around.
-- **`master_profile.yaml` mirrors the CV, not the reverse.** Truth is `main_cv_v2.pdf` from
-  `data/cv_data.json`; on disagreement fix the yaml. `scripts/profile_sync.py` enforces it — new
-  spellings go in its `ALIASES` dict, never loosen the matcher.
-- **Cowork is the interface layer only** (scheduled run, review artifact, notifications). It shells
-  out to the CLI; graph logic there would be unversioned and untestable.
+- **`data/master_profile.yaml` IS the source of truth; `cv_data.json` is generated from it.**
+  This file said the opposite until 2026-10-19 and the yaml never did — its own header reads
+  "THIS FILE is authoritative on what is claimed. cv_data.json and the rendered PDF are both
+  derived from it, never the other way around", `scripts/build_cv_data.py` calls itself "the
+  ONE-DIRECTION generator ... so cv_data.json is never hand-edited", and `tasks/todo.md` carries
+  the decision as a closed item. Believe the yaml.
+  The flow is: edit the yaml → `python3 scripts/build_cv_data.py` (concatenates outcome + metric
+  + method into finished sentences, trimmed to `MAX_BULLETS` 3 per entry and `MAX_STACK_ITEMS` 5)
+  → `./build_cv.sh` → `jobpilot profile check`.
+  `cv_data.json` is a build artifact of the GENERIC CV only: `build_cv.sh` is its sole consumer
+  and nothing under `src/agentic_ai/` reads it. A tailored render goes yaml → `Profile` → `Draft`
+  → `render.build_cv_render_data` → Jinja, never through the json.
+  `scripts/profile_sync.py` is therefore a STALENESS check — did you regenerate the json, or
+  hand-edit it — not a check of two independent sources. New spellings go in its `ALIASES` dict;
+  never loosen the matcher.
+- **The MCP server is the interface layer only.** `src/agentic_ai/mcp/server.py` is the whole of
+  it — six tools (`list_pending_reviews`, `get_job`, `get_applicant_profile`, `add_job`,
+  `review_job`, `mark_applied`), each shelling out through `_run_cli` or reading `db/repo.py`.
+  There is no `cowork/` directory in this repo; "Cowork" in `plan.md` means the client that calls
+  these tools. Three of the six WRITE (`add_job`, `review_job`, `mark_applied`), so the server is
+  not read-only — but it still owns no graph logic, and it must not: logic there would be
+  unversioned and untestable.
 
 ## Conventions
 - Nodes are pure functions of state. No globals, no hidden IO.
@@ -224,8 +267,21 @@ Manual JD input is the primary path; ingest is the supplement.
 
 ## Models
 Routing lives in `src/agentic_ai/config.py` (`plan.md` §12); no model name is hardcoded in a node.
-**Haiku** for schema-constrained extraction (`extract_requirements`, `role_classifier`,
-`recruiter_sim`), **Sonnet** for judgment (`diagnose`, `rewrite`, `review`, `hiring_manager`).
+Slimming the graph removed most of the consumers, so the live routing is now just three fields:
+
+| field | model | used by |
+|---|---|---|
+| `rewrite_model` | Sonnet | `agent_cv`, `rewrite` |
+| `diagnose_model` | Sonnet | `analyze`, and all six `cv_extract` schemas (`profile init`) |
+| `role_classifier_model` | Haiku | `section_order.classify_role` |
+
+`extract_model` (Haiku) survives as a field and is echoed in `jobpilot add` output, but **no node
+constructs a client with it** — requirement extraction moved inside `analyze` / `agent_cv` and runs
+on Sonnet. So the old "Haiku for extraction" rule no longer describes what runs; the reason it was
+true still holds, and `role_classifier_model` is the one place it is still applied.
+`review_model`, `recruiter_model`, `hiring_manager_model` and `requirement_judge_model` are DEAD
+fields — zero references in `src/`. They are kept so the `main` topology still configures, not
+because anything reads them; don't wire a new node to one without saying so here.
 Never collapse to one model — Opus on requirement extraction is ~10x cost for no quality gain.
 Embeddings stay local, keeping the stack to one API key.
 
@@ -233,6 +289,17 @@ Embeddings stay local, keeping the stack to one API key.
 `pytest -q`, `ruff check .`, `mypy src` clean · `jobpilot profile check` exits 0 · golden set no
 worse than baseline · hard coverage 1.0 at the gate, zero fabricated claims past `validate_facts` ·
 `plan.md` and this file updated if a decision changed · `graphify update .` run.
+
+**None of those three are clean on `agent-path` right now** (measured 2026-10-19), so "clean" means
+*no worse than this baseline* until the drift below is fixed — diff the failure set, don't read a
+red run as your own breakage:
+- `pytest`: 33 failing / 320 passing. Concentrated in `test_profile.py` and
+  `test_fact_validator.py`, which assert against the real `master_profile.yaml` and have drifted
+  from it; also `test_render.py`, `test_review.py`, `test_eval_harness.py`, `test_tracing.py`.
+- `ruff check .`: ~70 findings across `src/`, `tests/` and `scripts/`, most of them import-order
+  and newer default rules — the pinned floor is `ruff>=0.8` and recent ruff enables more.
+- `mypy src`: non-zero, mostly bare `dict` type-args and `Returning Any` in `db/repo.py`,
+  `state.py` and `nodes/rewrite.py`.
 
 ## Current focus
 - [ ] `evals/golden/real_railway_ai_agents_alternation.txt` is checked in but has **no
@@ -249,3 +316,19 @@ worse than baseline · hard coverage 1.0 at the gate, zero fabricated claims pas
 - [ ] Assisted-apply (Phase 6) — proposed, not yet in `plan.md`
 - [ ] Delete the deprecated `requirements.txt`; resolve the 2 self-cycles the graph reports
       (`budget.py`, `db/repo.py`)
+- [ ] **`llm_calls` accumulates across re-runs.** `state.py:212` is
+      `Annotated[list[dict], operator.add]`, and an `operator.add` channel cannot be cleared by
+      returning a value — so a resumed or re-run job keeps the previous attempt's calls and
+      `total_cost_usd` sums them twice. Two run rows logged $0.826 for a job that cost ~$0.34;
+      `jobpilot cost` over-reports and `JOBPILOT_MAX_DAILY_COST_USD` reads the inflated number.
+      Fix is a key per `(thread_id, attempt)` summed at read time, not a custom reducer.
+- [ ] **`jobpilot review` guards on `skip_reason`** rather than on a pending `human_review` in
+      `snapshot.next`, so a job paused for review can be refused by the command meant to approve it.
+- [ ] Stale docstrings left by the slimming, in code so not touched by the 2026-10-19 doc pass:
+      `cli.review` still says an edit "re-runs recruiter_sim/hiring_manager", and
+      `coverage.retrieve_evidence` / `score_coverage` are dead code the slim graph never calls.
+      Decide per item whether to delete or re-wire; don't let the docstrings keep describing `main`.
+- [ ] Retrieval (Chroma + bge-m3 + reranker) is built, calibrated and unused — see Stack. Either
+      put it back in the live path or move it behind an explicit "offline tools" heading in
+      `plan.md` §5, because right now the dependency cost is paid on every `uv sync` for a
+      subsystem no per-job run touches.
