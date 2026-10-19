@@ -53,7 +53,9 @@ def _log_event(event: dict) -> None:
 
 def _log_run(state) -> None:
     per_node: dict[str, float] = {}
-    for c in state.llm_calls:
+    # This run's calls only — see JobState.current_run_calls; the whole list still holds
+    # every call ever made on this thread, which would attribute a re-run's cost twice.
+    for c in state.current_run_calls():
         per_node[c["node"]] = round(per_node.get(c["node"], 0.0) + c["cost_usd"], 6)
     _log_event({
         "event": "run",
@@ -353,13 +355,16 @@ def review(
     from .preferences import diff_edited_bullets, record_preferences
 
     try:
-        paused = get_paused_state(job_id)
+        # require_pending asks the checkpoint whether `human_review` is actually the next
+        # task. The old guard tested `paused.skip_reason` instead, which refused a job
+        # carrying a stale reason from an earlier run and waved through one that had already
+        # finished and rendered. graph._not_pending_review_reason names which case it is.
+        paused = get_paused_state(job_id, require_pending=True)
     except KeyError as exc:
         raise typer.BadParameter(str(exc)) from None
-
-    if paused.skip_reason:
-        console.print(f"job {job_id} already ended: {paused.skip_reason}")
-        raise typer.Exit(1)
+    except ValueError as exc:
+        console.print(f"[yellow]{exc}[/yellow]")
+        raise typer.Exit(1) from None
 
     _report(paused, verbose=verbose)
 
@@ -629,10 +634,13 @@ def _report(state, verbose: bool = False) -> None:
         for k, v in state.artifacts.items():
             console.print(f"  {k}: {v}")
 
-    if state.llm_calls:
-        console.print(f"\n[dim]cost: ${state.total_cost_usd:.4f} ({len(state.llm_calls)} LLM call(s))[/dim]")
+    run_calls = state.current_run_calls()
+    if run_calls:
+        earlier = len(state.llm_calls) - len(run_calls)
+        prior = f", {earlier} earlier on this thread" if earlier else ""
+        console.print(f"\n[dim]cost: ${state.total_cost_usd:.4f} ({len(run_calls)} LLM call(s){prior})[/dim]")
         if verbose:
-            for c in state.llm_calls:
+            for c in run_calls:
                 cache = ""
                 if c["cache_read_tokens"] or c["cache_creation_tokens"]:
                     # literal square brackets are Rich markup — escape or they're

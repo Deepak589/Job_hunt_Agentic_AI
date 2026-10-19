@@ -111,13 +111,19 @@ def load_job(state: JobState) -> dict:
 
     Cleared here rather than in the entry points because this node runs exactly when a new
     run begins: a crash-resume replays from the last unfinished node, and `load_job` has
-    already completed by then, so a resumed run keeps its counters.
+    already completed by then, so a resumed run keeps its counters. `llm_calls_offset` rides
+    on the same property for the same reason — a re-run starts counting cost from here, a
+    resume keeps counting the spend of the attempt that crashed.
     """
     j = state.job
     return {
         "skip_reason": None,
         "validation_errors": [],
         "attempt_count": 0,
+        # `llm_calls` has an `operator.add` reducer, so it cannot be cleared by returning a
+        # value — a previous run's calls are still in it. Mark where this run's spend starts
+        # instead; `JobState.current_run_calls` explains why a watermark and not a clear.
+        "llm_calls_offset": len(state.llm_calls),
         "notes": [f"loaded job {j.id} — {j.title or '(untitled)'} @ {j.company or '(unknown)'}"],
     }
 
@@ -440,17 +446,52 @@ def resume_review(
     return asyncio.run(_resume_review(job_id_, action, draft))
 
 
-async def _get_paused_state(job_id_: str) -> JobState:
+async def _get_paused_state(job_id_: str, *, require_pending: bool = False) -> JobState:
     async with _open_checkpointer() as saver:
         snapshot = await _snapshot_for(saver, {"configurable": {"thread_id": job_id_}})
     if not snapshot.values:
         raise KeyError(f"no paused job found for id {job_id_!r}")
-    return JobState.model_validate(snapshot.values)
+    state = JobState.model_validate(snapshot.values)
+    if require_pending and "human_review" not in snapshot.next:
+        raise ValueError(_not_pending_review_reason(job_id_, state, snapshot.next))
+    return state
 
 
-def get_paused_state(job_id_: str) -> JobState:
-    """Read back a job paused by `run_for_review`, without resuming it."""
-    return asyncio.run(_get_paused_state(job_id_))
+def _not_pending_review_reason(job_id_: str, state: JobState, next_: tuple[str, ...]) -> str:
+    """Why this thread cannot be reviewed, named precisely.
+
+    `jobpilot review` used to infer reviewability from `state.skip_reason` being unset,
+    which is the wrong question twice over. It refused a job whose `skip_reason` was stale
+    from an earlier run (the railway posting, 2026-10-17 — approving it needed a hand-written
+    Python bypass), and it ACCEPTED a thread that had already finished and rendered, calling
+    `resume_review` on a graph with nothing left to resume. The checkpoint's pending-task
+    list is the real answer, the same source `_resume` and `list_pending_review_ids` already
+    use, so ask it and say which of the four cases this is.
+    """
+    if next_:
+        return (
+            f"job {job_id_!r} is not waiting for review — it stopped mid-run at "
+            f"{', '.join(next_)}. Use 'jobpilot resume {job_id_}'."
+        )
+    if state.skip_reason:
+        return f"job {job_id_!r} ended before review: {state.skip_reason}"
+    if state.artifacts:
+        return (
+            f"job {job_id_!r} is already finished and rendered "
+            f"({', '.join(sorted(state.artifacts))}); there is nothing to review."
+        )
+    return f"job {job_id_!r} has no pending review step."
+
+
+def get_paused_state(job_id_: str, *, require_pending: bool = False) -> JobState:
+    """Read back a job paused by `run_for_review`, without resuming it.
+
+    `require_pending=True` additionally asserts the checkpoint is actually sitting at
+    `human_review`, raising `ValueError` with the reason if not. It is off by default
+    because `mcp.server.get_job` reads finished jobs through here too; `jobpilot review`
+    passes it.
+    """
+    return asyncio.run(_get_paused_state(job_id_, require_pending=require_pending))
 
 
 async def _list_pending_review_ids() -> list[str]:

@@ -72,8 +72,12 @@ def persist_run(state: JobState, db_path: Path | None = None) -> str:
     job = state.job
     run_id = uuid.uuid4().hex
 
-    tokens_in = sum(c["input_tokens"] for c in state.llm_calls)
-    tokens_out = sum(c["output_tokens"] for c in state.llm_calls)
+    # This run's calls, not every call on the thread — `llm_calls` has an `operator.add`
+    # reducer and keeps the previous run's entries (JobState.current_run_calls). Summing the
+    # whole list made each re-run's row carry its predecessors' tokens and cost too.
+    run_calls = state.current_run_calls()
+    tokens_in = sum(c["input_tokens"] for c in run_calls)
+    tokens_out = sum(c["output_tokens"] for c in run_calls)
 
     with sqlite3.connect(path) as conn:
         conn.execute(

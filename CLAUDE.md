@@ -323,14 +323,18 @@ red run as your own breakage:
 - [ ] Assisted-apply (Phase 6) — proposed, not yet in `plan.md`
 - [ ] Delete the deprecated `requirements.txt`; resolve the 2 self-cycles the graph reports
       (`budget.py`, `db/repo.py`)
-- [ ] **`llm_calls` accumulates across re-runs.** `state.py:212` is
-      `Annotated[list[dict], operator.add]`, and an `operator.add` channel cannot be cleared by
-      returning a value — so a resumed or re-run job keeps the previous attempt's calls and
-      `total_cost_usd` sums them twice. Two run rows logged $0.826 for a job that cost ~$0.34;
-      `jobpilot cost` over-reports and `JOBPILOT_MAX_DAILY_COST_USD` reads the inflated number.
-      Fix is a key per `(thread_id, attempt)` summed at read time, not a custom reducer.
-- [ ] **`jobpilot review` guards on `skip_reason`** rather than on a pending `human_review` in
-      `snapshot.next`, so a job paused for review can be refused by the command meant to approve it.
+- [x] `llm_calls` accumulation fixed with a watermark: `llm_calls_offset`, stamped by
+      `load_job` and read by `JobState.current_run_calls`. The `operator.add` reducer still
+      cannot be cleared, so nothing tries to — `llm_calls` keeps every call and the offset
+      says where this run's start. `load_job` is the right place because it runs exactly once
+      per new run, while a crash-resume replays with it already complete, so the crashed
+      attempt's spend stays counted (it was spent). `persist_run`, `_log_run` and `_report`
+      all read the windowed view now.
+- [x] `jobpilot review` asks the checkpoint instead of guessing:
+      `get_paused_state(job_id, require_pending=True)` raises unless `human_review` is in
+      `snapshot.next`, and `graph._not_pending_review_reason` names which of the four cases it
+      is. `require_pending` is off by default because `mcp.server.get_job` reads finished jobs
+      through the same function.
 - [ ] Stale docstrings left by the slimming, in code so not touched by the 2026-10-19 doc pass:
       `cli.review` still says an edit "re-runs recruiter_sim/hiring_manager", and
       `coverage.retrieve_evidence` / `score_coverage` are dead code the slim graph never calls.

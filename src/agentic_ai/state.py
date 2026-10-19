@@ -7,7 +7,7 @@ them; they arrive with the rewriter in Phase 2.
 from __future__ import annotations
 
 import operator
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import hashlib
 
@@ -211,9 +211,35 @@ class JobState(BaseModel):
     # See costs.record_usage. Reducer needed for the same reason `notes` has one.
     llm_calls: Annotated[list[dict], operator.add] = []
 
+    # Where THIS run's calls start in `llm_calls`. Stamped by `load_job`, which runs exactly
+    # once per new run; see `current_run_calls` for why an offset rather than a clear.
+    llm_calls_offset: int = 0
+
+    def current_run_calls(self) -> list[dict[str, Any]]:
+        """The calls this run paid for — not every call ever made on this thread.
+
+        `thread_id` is the job id, so re-running a job reuses its checkpoint, and an
+        `operator.add` channel CANNOT be cleared by returning a value: the reducer appends
+        whatever a node returns to what is already there. So the previous run's calls were
+        still in `llm_calls`, and the new run's `persist_run` wrote a row carrying both.
+        Measured on the railway posting (2026-10-17): two run rows each recorded $0.826 for
+        a job that cost about $0.34. `jobpilot cost` and `judge-stats` aggregate those rows,
+        and `budget.py` reads today's total out of them to enforce
+        `JOBPILOT_MAX_DAILY_COST_USD` — so the inflation was not cosmetic, it could refuse
+        runs against spend that never happened.
+
+        A watermark fixes it without fighting the reducer, and lands the resume case right
+        by construction: `load_job` stamps the offset and runs exactly when a NEW run begins,
+        while a crash-resume replays from the last unfinished node with `load_job` already
+        complete — so the offset it set survives and the crashed attempt's spend stays
+        counted, which is correct, that money was spent on this run. `llm_calls` itself keeps
+        every call, so nothing is lost and the full history is still inspectable.
+        """
+        return self.llm_calls[self.llm_calls_offset :]
+
     @property
     def total_cost_usd(self) -> float:
-        return round(sum(c["cost_usd"] for c in self.llm_calls), 6)
+        return round(sum(c["cost_usd"] for c in self.current_run_calls()), 6)
 
     def hard(self) -> list[Requirement]:
         return [r for r in self.requirements if r.type == "hard"]
